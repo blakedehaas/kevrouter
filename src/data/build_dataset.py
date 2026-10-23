@@ -1,52 +1,91 @@
-"""Parse, align, deduplicate, and split LLMRouterBench data for KevRouter.
+"""Align, deduplicate, label, and split LLMRouterBench data for KevRouter.
 
 This script implements the exact data specification in the project proposal:
-  1. Filters to the 9 primary benchmarks: AIME, LiveMathBench, LiveCodeBench,
-     SWE-Bench, GPQA, HLE, MMLU-Pro, SimpleQA, and ArenaHard.
-  2. Holds out tau2-Bench (278 queries) exclusively for Out-Of-Distribution (OOD) evaluation.
-  3. Verifies complete model results for all destination models per query.
-  4. Deduplicates queries via normalization and cryptographic hashing.
-  5. Computes the optimal cost-sensitive routing label per query:
-     - The least expensive destination model that answered correctly (score = 1.0).
-  6. Creates deterministic 80/10/10 stratified splits within each benchmark.
-  7. Outputs train, validation, in-distribution test, and OOD test splits to data/processed/.
+  - 13 Flagship Destination Models:
+      1. claude-sonnet-4
+      2. deepseek-r1-0528
+      3. deepseek-v3-0324
+      4. deepseek-v3.1-terminus
+      5. gemini-2.5-flash
+      6. gemini-2.5-pro
+      7. glm-4.6
+      8. gpt-5
+      9. gpt-5-chat
+     10. intern-s1
+     11. kimi-k2-0905
+     12. qwen3-235b-a22b-2507
+     13. qwen3-235b-a22b-thinking-2507
+
+  - 9 Primary Datasets (12,168 total queries):
+      - AIME (60)
+      - LiveMathBench (121)
+      - LiveCodeBench (1,055)
+      - SWE-Bench (500)
+      - GPQA (198)
+      - HLE (2,158)
+      - MMLU-Pro (3,000)
+      - SimpleQA (4,326)
+      - ArenaHard (750)
+
+  - 1 Held-Out OOD Dataset:
+      - tau2-bench (278 queries)
+
+  - Splits:
+      - Deterministic 80/10/10 split stratified by dataset & optimal routing label:
+        * 9,734 training queries
+        * 1,217 validation queries
+        * 1,217 in-distribution test queries
+        * 278 out-of-distribution queries (tau2-bench)
 """
 
 import argparse
 import hashlib
 import json
 import re
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from collections import Counter, defaultdict
 
+# 13 Destination Models specified in LLMRouterBench & project proposal
+DESTINATION_MODELS_13 = [
+    "claude-sonnet-4",
+    "deepseek-r1-0528",
+    "deepseek-v3-0324",
+    "deepseek-v3.1-terminus",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "glm-4.6",
+    "gpt-5",
+    "gpt-5-chat",
+    "intern-s1",
+    "kimi-k2-0905",
+    "qwen3-235b-a22b-2507",
+    "qwen3-235b-a22b-thinking-2507",
+]
 
-# Benchmark name aliases to match directory names in LLMRouterBench
-PRIMARY_DATASET_MAP = {
-    "aime": "AIME",
-    "livemathbench": "LiveMathBench",
-    "livecodebench": "LiveCodeBench",
-    "swebench": "SWE-Bench",
-    "swe-bench": "SWE-Bench",
-    "gpqa": "GPQA",
-    "hle": "HLE",
-    "mmlupro": "MMLU-Pro",
-    "mmlu-pro": "MMLU-Pro",
-    "simpleqa": "SimpleQA",
-    "arenahard": "ArenaHard",
-    "arena-hard": "ArenaHard",
+# Primary benchmarks and their canonical target splits
+PRIMARY_BENCHMARKS = {
+    "aime": {"split": "hybrid", "expected_count": 60, "name": "AIME"},
+    "livemathbench": {"split": "test", "expected_count": 121, "name": "LiveMathBench"},
+    "livecodebench": {"split": "test", "expected_count": 1055, "name": "LiveCodeBench"},
+    "swe-bench": {"split": "verified", "expected_count": 500, "name": "SWE-Bench"},
+    "gpqa": {"split": "test", "expected_count": 198, "name": "GPQA"},
+    "hle": {"split": "test", "expected_count": 2158, "name": "HLE"},
+    "mmlupro": {"split": "test_3000", "expected_count": 3000, "name": "MMLU-Pro"},
+    "simpleqa": {"split": "test", "expected_count": 4326, "name": "SimpleQA"},
+    "arenahard": {"split": "test", "expected_count": 750, "name": "ArenaHard"},
 }
 
-OOD_DATASET_ALIASES = ["tau2", "tau2bench", "tau2-bench", "tau_2"]
+OOD_BENCHMARK = {
+    "tau2": {"split": "test", "expected_count": 278, "name": "tau2-bench"}
+}
 
 
 def normalize_query_text(text: str) -> str:
     """Normalize text by stripping whitespace and standardizing spacing for hashing."""
     if not text:
         return ""
-    # Standardize whitespace and trim
-    normalized = re.sub(r"\s+", " ", text.strip())
-    return normalized
+    return re.sub(r"\s+", " ", text.strip())
 
 
 def compute_query_hash(text: str) -> str:
@@ -55,135 +94,116 @@ def compute_query_hash(text: str) -> str:
     return hashlib.sha256(norm.encode("utf-8")).hexdigest()
 
 
-def load_raw_dataset_records(dataset_dir: Path) -> Dict[str, Dict[int, Dict[str, Any]]]:
-    """Load all model JSON files for a given dataset directory.
+def load_dataset_model_records(
+    dataset_dir: Path,
+    target_split: str,
+    target_models: List[str],
+) -> Dict[str, Dict[int, Dict[str, Any]]]:
+    """Load JSON records for target models in a benchmark directory.
 
     Returns:
         Dict mapping model_name -> {record_index: record_dict}
     """
-    model_data: Dict[str, Dict[int, Dict[str, Any]]] = {}
+    model_records: Dict[str, Dict[int, Dict[str, Any]]] = {}
 
-    for json_file in dataset_dir.glob("*.json"):
-        model_name = json_file.stem
+    json_files = list(dataset_dir.rglob("*.json"))
+    for jf in json_files:
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
-                records = json.load(f)
+            with open(jf, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-            if isinstance(records, list):
-                # Map by record_index or list position
-                indexed_records = {}
-                for idx, r in enumerate(records):
-                    rec_idx = r.get("record_index", idx)
-                    indexed_records[rec_idx] = r
-                model_data[model_name] = indexed_records
-            elif isinstance(records, dict):
-                # Dict keyed by index or id
-                indexed_records = {}
-                for k, v in records.items():
-                    try:
-                        rec_idx = int(k)
-                    except ValueError:
-                        rec_idx = v.get("record_index", len(indexed_records))
-                    indexed_records[rec_idx] = v
-                model_data[model_name] = indexed_records
+            m_name = data.get("model_name")
+            sp = data.get("split")
+
+            if m_name not in target_models:
+                continue
+
+            # Check split match
+            if target_split and sp != target_split:
+                continue
+
+            records = data.get("records", [])
+            indexed = {}
+            for idx, r in enumerate(records):
+                rec_idx = r.get("index", r.get("record_index", idx))
+                indexed[rec_idx] = r
+
+            model_records[m_name] = indexed
         except Exception as e:
-            print(f"[!] Warning: failed to load {json_file}: {e}")
+            print(f"[!] Error reading {jf}: {e}")
 
-    return model_data
+    return model_records
 
 
-def align_and_filter_records(
-    model_data: Dict[str, Dict[int, Dict[str, Any]]],
-    target_models: Optional[List[str]] = None,
+def align_query_instances(
+    model_records: Dict[str, Dict[int, Dict[str, Any]]],
+    dataset_name: str,
+    required_models: List[str],
 ) -> List[Dict[str, Any]]:
-    """Align query records across all destination models and retain only complete queries."""
-    if not model_data:
+    """Align query records across all required models, dropping incomplete instances."""
+    # Find available models that have records
+    available_models = [m for m in required_models if m in model_records and model_records[m]]
+    if not available_models:
         return []
 
-    available_models = list(model_data.keys())
-    if target_models:
-        eval_models = [m for m in target_models if m in model_data]
-    else:
-        eval_models = available_models
+    # Find common indices
+    common_indices = set(model_records[available_models[0]].keys())
+    for m in available_models[1:]:
+        common_indices &= set(model_records[m].keys())
 
-    if not eval_models:
-        return []
-
-    # Find common record indices that exist across all required models
-    candidate_indices = set(model_data[eval_models[0]].keys())
-    for m in eval_models[1:]:
-        candidate_indices &= set(model_data[m].keys())
-
-    aligned_records = []
-
-    for idx in sorted(candidate_indices):
-        # Extract prompt / origin_query from first model
-        base_record = model_data[eval_models[0]][idx]
+    aligned = []
+    for idx in sorted(common_indices):
+        base_rec = model_records[available_models[0]][idx]
         query_text = (
-            base_record.get("origin_query")
-            or base_record.get("prompt")
-            or base_record.get("question")
+            base_rec.get("origin_query")
+            or base_rec.get("prompt")
+            or base_rec.get("question")
             or ""
         )
-        prompt_text = base_record.get("prompt") or query_text
+        prompt_text = base_rec.get("prompt") or query_text
 
-        # Collect model results for this query
-        models_eval = {}
-        is_complete = True
-
-        for m in eval_models:
-            m_rec = model_data[m][idx]
-            score = m_rec.get("score")
-            cost = m_rec.get("cost")
-
-            if score is None or cost is None:
-                is_complete = False
-                break
-
-            models_eval[m] = {
-                "score": float(score),
-                "cost": float(cost),
+        model_evals = {}
+        for m in available_models:
+            m_rec = model_records[m][idx]
+            model_evals[m] = {
+                "score": float(m_rec.get("score", 0.0)),
+                "cost": float(m_rec.get("cost", 0.0)),
                 "prompt_tokens": m_rec.get("prompt_tokens"),
                 "completion_tokens": m_rec.get("completion_tokens"),
                 "prediction": m_rec.get("prediction"),
             }
 
-        if not is_complete:
-            continue
+        # Determine optimal routing target (cheapest model that answered correctly)
+        correct_models = [
+            (m, data["cost"])
+            for m, data in model_evals.items()
+            if data["score"] >= 1.0
+        ]
 
-        aligned_records.append({
-            "record_index": idx,
+        if correct_models:
+            # Sort by cost ascending, tie-break by name
+            correct_models.sort(key=lambda x: (x[1], x[0]))
+            optimal_model, optimal_cost = correct_models[0]
+            any_correct = True
+        else:
+            # Fallback to cheapest overall
+            cheapest = min(model_evals.items(), key=lambda x: (x[1]["cost"], x[0]))
+            optimal_model, optimal_cost = cheapest[0], cheapest[1]["cost"]
+            any_correct = False
+
+        aligned.append({
+            "index": idx,
+            "dataset": dataset_name,
             "origin_query": query_text,
             "prompt": prompt_text,
             "query_hash": compute_query_hash(query_text),
-            "model_evals": models_eval,
+            "optimal_model": optimal_model,
+            "optimal_cost": optimal_cost,
+            "any_model_correct": any_correct,
+            "model_evals": model_evals,
         })
 
-    return aligned_records
-
-
-def determine_optimal_routing_label(
-    model_evals: Dict[str, Dict[str, float]],
-) -> Tuple[Optional[str], float, bool]:
-    """Find the cheapest destination model that answered correctly (score == 1.0).
-
-    Returns:
-        (best_model_name, best_model_cost, any_correct_flag)
-    """
-    correct_models = [
-        (m, data["cost"])
-        for m, data in model_evals.items()
-        if data.get("score", 0.0) >= 1.0
-    ]
-
-    if not correct_models:
-        # None answered correctly; fallback to lowest cost overall
-        cheapest_model = min(model_evals.items(), key=lambda x: x[1]["cost"])
-        return cheapest_model[0], cheapest_model[1]["cost"], False
-
-    # Sort by cost ascending, tie-break alphabetically for determinism
-    correct_models.sort(key=lambda x: (x[1], x[0]))
-    return correct_models[0][0], correct_models[0][1], True
+    return aligned
 
 
 def stratified_split(
@@ -192,28 +212,28 @@ def stratified_split(
     val_ratio: float = 0.1,
     seed: int = 42,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Deterministic stratified 80/10/10 split based on the optimal routing label."""
+    """Deterministic stratified 80/10/10 split by optimal routing target."""
     import random
-
     rng = random.Random(seed)
 
-    # Group by routing target label
     strata: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for r in records:
-        label = r.get("optimal_model") or "NONE_CORRECT"
-        strata[label].append(r)
+        strata[r["optimal_model"]].append(r)
 
     train_set, val_set, test_set = [], [], []
 
     for label, group in sorted(strata.items()):
-        # Deterministic shuffle within group
         shuffled = list(group)
-        shuffled.sort(key=lambda x: x["query_hash"])  # stable sort first
+        # Stable sort by query hash then shuffle with seed
+        shuffled.sort(key=lambda x: x["query_hash"])
         rng.shuffle(shuffled)
 
         n = len(shuffled)
-        n_train = int(n * train_ratio)
-        n_val = int(n * val_ratio)
+        n_train = int(round(n * train_ratio))
+        n_val = int(round(n * val_ratio))
+        # Ensure we don't exceed length
+        if n_train + n_val > n:
+            n_val = max(0, n - n_train)
 
         train_set.extend(shuffled[:n_train])
         val_set.extend(shuffled[n_train : n_train + n_val])
@@ -228,7 +248,7 @@ def save_jsonl(records: List[Dict[str, Any]], output_path: Path):
     with open(output_path, "w", encoding="utf-8") as f:
         for r in records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
-    print(f"[+] Saved {len(records):,} records to {output_path}")
+    print(f"[+] Saved {len(records):>5,} records to {output_path}")
 
 
 def main():
@@ -238,8 +258,8 @@ def main():
     parser.add_argument(
         "--raw-bench-dir",
         type=str,
-        default="data/raw/bench",
-        help="Path to extracted benchmark directory (default: data/raw/bench)",
+        default="data/raw/bench-release",
+        help="Path to extracted benchmark release directory (default: data/raw/bench-release)",
     )
     parser.add_argument(
         "--output-dir",
@@ -261,114 +281,122 @@ def main():
     out_dir = (project_root / args.output_dir).resolve()
 
     if not bench_dir.exists():
-        print(f"[!] Benchmark directory not found at {bench_dir}.")
-        print("    Please run the download script first: python scripts/download_data.py")
+        print(f"[!] Directory {bench_dir} does not exist.")
         return
 
-    print("=== KevRouter Dataset Alignment & Splitting ===")
-    print(f"Reading from: {bench_dir}")
-    print(f"Saving to:    {out_dir}")
-
-    # Discover dataset subdirectories
-    subdirs = [d for d in bench_dir.iterdir() if d.is_dir()]
-    print(f"Found {len(subdirs)} benchmark subdirectories.")
+    print("=== KevRouter: Dataset Processing, Alignment & Stratification ===")
+    print(f"Reading Benchmarks from: {bench_dir}")
+    print(f"Saving Processed Data to: {out_dir}")
 
     primary_records_by_dataset: Dict[str, List[Dict[str, Any]]] = {}
-    ood_records: List[Dict[str, Any]] = []
-
     seen_hashes: Set[str] = set()
     duplicates_dropped = 0
 
-    for d in subdirs:
-        d_name_lower = d.name.lower()
-
-        # Check if primary or OOD
-        canonical_name = None
-        for key, val in PRIMARY_DATASET_MAP.items():
-            if key in d_name_lower:
-                canonical_name = val
-                break
-
-        is_ood = any(ood in d_name_lower for ood in OOD_DATASET_ALIASES)
-
-        if not canonical_name and not is_ood:
+    print("\n--- 1. Processing 9 Primary Benchmarks ---")
+    for ds_key, cfg in PRIMARY_BENCHMARKS.items():
+        ds_dir = bench_dir / ds_key
+        if not ds_dir.exists():
+            print(f"[!] Missing benchmark directory: {ds_dir}")
             continue
 
-        print(f"[*] Processing {d.name} ({'OOD' if is_ood else canonical_name})...")
-        model_data = load_raw_dataset_records(d)
-        aligned = align_and_filter_records(model_data)
+        model_recs = load_dataset_model_records(
+            dataset_dir=ds_dir,
+            target_split=cfg["split"],
+            target_models=DESTINATION_MODELS_13,
+        )
 
-        # Deduplicate and compute optimal model labels
-        clean_dataset_records = []
+        aligned = align_query_instances(
+            model_records=model_recs,
+            dataset_name=cfg["name"],
+            required_models=list(model_recs.keys()),
+        )
+
+        # Deduplication
+        deduped = []
         for r in aligned:
             q_hash = r["query_hash"]
             if q_hash in seen_hashes:
                 duplicates_dropped += 1
                 continue
             seen_hashes.add(q_hash)
+            deduped.append(r)
 
-            best_model, best_cost, any_correct = determine_optimal_routing_label(
-                r["model_evals"]
-            )
-            r["dataset"] = canonical_name if canonical_name else "tau2-bench"
-            r["optimal_model"] = best_model
-            r["optimal_cost"] = best_cost
-            r["any_model_correct"] = any_correct
+        primary_records_by_dataset[cfg["name"]] = deduped
+        print(
+            f"  {cfg['name']:<18} | Target: {cfg['expected_count']:>5} | "
+            f"Aligned: {len(aligned):>5} | Cleaned: {len(deduped):>5}"
+        )
 
-            clean_dataset_records.append(r)
+    print("\n--- 2. Processing Held-Out OOD Benchmark (tau2-bench) ---")
+    tau2_dir = bench_dir / "tau2"
+    tau2_records = []
+    if tau2_dir.exists():
+        model_recs = load_dataset_model_records(
+            dataset_dir=tau2_dir,
+            target_split="test",
+            target_models=DESTINATION_MODELS_13,
+        )
+        tau2_aligned = align_query_instances(
+            model_records=model_recs,
+            dataset_name="tau2-bench",
+            required_models=list(model_recs.keys()),
+        )
+        for r in tau2_aligned:
+            tau2_records.append(r)
+        print(f"  tau2-bench         | Target:   278 | Aligned: {len(tau2_records):>5}")
 
-        if is_ood:
-            ood_records.extend(clean_dataset_records)
-        else:
-            primary_records_by_dataset[canonical_name] = clean_dataset_records
-
-    # Perform stratified 80/10/10 split per primary dataset
+    # 3. Stratified 80/10/10 Splits
     all_train, all_val, all_test = [], [], []
 
-    print("\n" + "=" * 65)
-    print(f"{'DATASET':<20} | {'TOTAL':<8} | {'TRAIN (80%)':<12} | {'VAL (10%)':<10} | {'TEST (10%)'}")
+    print("\n--- 3. Stratified 80/10/10 Splitting by Benchmark ---")
+    print(f"{'BENCHMARK':<18} | {'TOTAL':<7} | {'TRAIN (80%)':<12} | {'VAL (10%)':<10} | {'TEST (10%)'}")
     print("-" * 65)
 
-    for d_name, records in sorted(primary_records_by_dataset.items()):
-        tr, va, te = stratified_split(records, train_ratio=0.8, val_ratio=0.1, seed=args.seed)
+    for b_name, recs in sorted(primary_records_by_dataset.items()):
+        tr, va, te = stratified_split(recs, train_ratio=0.8, val_ratio=0.1, seed=args.seed)
         all_train.extend(tr)
         all_val.extend(va)
         all_test.extend(te)
-        print(f"{d_name:<20} | {len(records):<8} | {len(tr):<12} | {len(va):<10} | {len(te)}")
+        print(f"{b_name:<18} | {len(recs):>5} | {len(tr):>10} | {len(va):>8} | {len(te):>8}")
 
     print("=" * 65)
-    print(f"Total Primary Queries:    {len(all_train) + len(all_val) + len(all_test):,}")
-    print(f"  - Training Set:         {len(all_train):,} (Target in proposal: 9,734)")
-    print(f"  - Validation Set:       {len(all_val):,} (Target in proposal: 1,217)")
-    print(f"  - In-Distribution Test: {len(all_test):,} (Target in proposal: 1,217)")
-    print(f"Held-out OOD (tau2-bench): {len(ood_records):,} (Target in proposal: 278)")
-    print(f"Duplicate Queries Dropped: {duplicates_dropped:,}")
+    total_primary = len(all_train) + len(all_val) + len(all_test)
+    print(f"Total Primary Queries:    {total_primary:>6,} (Target: 12,168)")
+    print(f"  - Training Set:         {len(all_train):>6,} (Target: 9,734)")
+    print(f"  - Validation Set:       {len(all_val):>6,} (Target: 1,217)")
+    print(f"  - In-Distribution Test: {len(all_test):>6,} (Target: 1,217)")
+    print(f"Held-Out OOD (tau2):      {len(tau2_records):>6,} (Target: 278)")
+    print(f"Duplicates Dropped:       {duplicates_dropped:>6,}")
 
-    # Save to disk
+    # 4. Save splits to disk
     out_dir.mkdir(parents=True, exist_ok=True)
     save_jsonl(all_train, out_dir / "train.jsonl")
     save_jsonl(all_val, out_dir / "val.jsonl")
     save_jsonl(all_test, out_dir / "test_id.jsonl")
-    save_jsonl(ood_records, out_dir / "test_ood.jsonl")
+    save_jsonl(tau2_records, out_dir / "test_ood.jsonl")
 
-    # Save metadata summary
-    metadata = {
+    # 5. Metadata Summary
+    summary = {
         "seed": args.seed,
+        "primary_benchmarks": list(PRIMARY_BENCHMARKS.keys()),
+        "destination_models": DESTINATION_MODELS_13,
         "counts": {
             "train": len(all_train),
             "val": len(all_val),
             "test_id": len(all_test),
-            "test_ood": len(ood_records),
+            "test_ood": len(tau2_records),
+            "total_primary": total_primary,
             "duplicates_dropped": duplicates_dropped,
         },
         "target_model_distribution_train": dict(
             Counter(r["optimal_model"] for r in all_train)
         ),
     }
-    with open(out_dir / "dataset_summary.json", "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2)
 
-    print(f"[+] Summary written to {out_dir / 'dataset_summary.json'}")
+    with open(out_dir / "dataset_summary.json", "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+
+    print(f"[+] Dataset summary saved to {out_dir / 'dataset_summary.json'}")
 
 
 if __name__ == "__main__":
