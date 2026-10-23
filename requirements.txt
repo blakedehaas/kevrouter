@@ -1,0 +1,26 @@
+# Core Deep Learning & LLMs
+torch
+transformers
+accelerate
+peft
+bitsandbytes
+
+# Hugging Face & Datasets
+datasets
+huggingface_hub
+
+# Data Science & Exploratory Data Analysis
+pandas
+numpy
+scipy
+scikit-learn
+matplotlib
+seaborn
+
+# Observability & Metrics
+opik
+
+# Utilities & Jupyter Notebook support
+tqdm
+ipykernel
+jupyter

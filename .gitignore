@@ -23,6 +23,7 @@ wheels/
 # Virtual Environments
 .env
 .venv
+kevrouter_venv/
 env/
 venv/
 ENV/
