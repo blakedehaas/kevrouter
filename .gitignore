@@ -33,10 +33,10 @@ ENV/
 */.ipynb_checkpoints/*
 
 # Data & Checkpoints (large files)
-data/
-checkpoints/
-models/
-outputs/
+/data/
+/checkpoints/
+/models/
+/outputs/
 *.parquet
 *.pt
 *.bin
