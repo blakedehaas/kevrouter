@@ -189,6 +189,12 @@ def predict_routing(
             h_o = torch.randn(1, len(DESTINATION_MODELS), hidden_dim, generator=gen)
             with torch.no_grad():
                 logits = head(h_d, h_o)
+                # Option 1: Dynamic Candidate Masking (e.g. gpt-5-chat missing on tau2-bench)
+                model_evals = r.get("model_evals")
+                is_tau2 = (r.get("dataset") == "tau2-bench" or r.get("_meta", {}).get("dataset") == "tau2-bench")
+                for m_idx, m_name in enumerate(DESTINATION_MODELS):
+                    if (model_evals is not None and m_name not in model_evals) or (is_tau2 and m_name == "gpt-5-chat"):
+                        logits[0, m_idx] = -1e9
                 probs = torch.softmax(logits, dim=-1).squeeze(0).tolist()
                 if rule == "cost_utility":
                     chosen = rule_cost_utility(probs, mu=mu)

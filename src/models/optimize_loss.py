@@ -131,6 +131,12 @@ def extract_probabilities(
         h_d, h_o = trainer.encode_batch_representations([r])
         with torch.no_grad():
             logits = trainer.head(h_d, h_o)
+            # Option 1: Dynamic Candidate Masking (e.g. gpt-5-chat missing on tau2-bench)
+            model_evals = r.get("model_evals")
+            is_tau2 = (r.get("dataset") == "tau2-bench" or r.get("_meta", {}).get("dataset") == "tau2-bench")
+            for m_idx, m_name in enumerate(DESTINATION_MODELS):
+                if (model_evals is not None and m_name not in model_evals) or (is_tau2 and m_name == "gpt-5-chat"):
+                    logits[0, m_idx] = -1e9
             probs = torch.softmax(logits, dim=-1).squeeze(0).tolist()
             all_probs.append(probs)
 
