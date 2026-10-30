@@ -1,0 +1,18 @@
+{
+  "total_queries": 278,
+  "correct_routes": 68,
+  "routing_accuracy": 24.46043165467626,
+  "optimal_match_rate": 6.115107913669065,
+  "total_cost_usd": 10.550615119999994,
+  "avg_cost_per_query_usd": 0.03795185294964027,
+  "cost_per_correct_usd": 0.15515610470588226,
+  "avg_latency_ms": 0.3397396142534215,
+  "by_benchmark": {
+    "tau2-bench": {
+      "total": 278,
+      "correct": 68,
+      "optimal": 17,
+      "cost": 10.550615119999994
+    }
+  }
+}

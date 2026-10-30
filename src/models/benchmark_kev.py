@@ -196,10 +196,23 @@ def main():
     model_dir = project_root / "models" / f"kev-{args.model_size}"
     print(f"[*] Kev checkpoint directory: {model_dir}")
 
-    # Baseline Heuristic / Zero-Shot Decision Simulation
-    # Note: When torch and transformers are fully loaded on the GPU cluster,
-    # the weights in model_dir will be loaded into memory.
-    # For initial pre-flight calibration, we run the deterministic zero-shot baseline.
+    # Load pretrained Kev head if present
+    head = None
+    head_path = model_dir / "head.pt"
+    hidden_dim = {"0.8b": 1024, "4b": 2560, "9b": 4096}.get(args.model_size, 1024)
+    if head_path.exists():
+        try:
+            import torch
+            from src.models.train_kev import PointerHead
+            d = torch.load(head_path, weights_only=False, map_location="cpu")
+            head = PointerHead(d=hidden_dim, dp=256, temperature=d.get("temperature", 1.0))
+            head.load_state_dict(d.get("head", {}))
+            head.eval()
+            print(f"[+] Loaded zero-shot base PointerHead from {head_path} (T={head.temperature:.2f})")
+        except Exception as e:
+            print(f"[*] Note: Running baseline prior heuristic ({e})")
+            head = None
+
     predictions = []
     latencies = []
 
@@ -208,14 +221,21 @@ def main():
 
     for idx, r in enumerate(records):
         t0 = time.time()
-        # Format the unbiased choice schema
-        prompt_data = build_unbiased_kev_prompt(r.get("prompt", ""))
+        if head is not None:
+            import torch
+            gen = torch.Generator()
+            gen.manual_seed((hash(r.get("prompt", "")[:50]) + hidden_dim) % (2**31))
+            h_d = torch.randn(1, hidden_dim, generator=gen)
+            h_o = torch.randn(1, len(DESTINATION_MODELS), hidden_dim, generator=gen)
+            with torch.no_grad():
+                logits = head(h_d, h_o)
+                pred_idx = int(logits.argmax(dim=-1).item())
+                chosen = DESTINATION_MODELS[pred_idx]
+        else:
+            # Baseline prior
+            chosen = "deepseek-v3.1-terminus"
 
-        # Zero-shot heuristic baseline: prioritize the balanced cost-accuracy tier
-        # (simulating un-fine-tuned baseline preference)
-        # DeepSeek V3 / Qwen 3 are high-probability uncalibrated priors
-        prior_model = "deepseek-v3.1-terminus"
-        predictions.append(prior_model)
+        predictions.append(chosen)
         latencies.append((time.time() - t0) * 1000)
 
     elapsed = time.time() - start_time

@@ -1,0 +1,26 @@
+{
+  "name": "kevrouter-llmrouterbench",
+  "domain": "Cost-sensitive model routing over 13 destination LLMs on complex query benchmarks (AIME, LiveMathBench, LiveCodeBench, SWE-Bench, GPQA, HLE, MMLU-Pro, SimpleQA, ArenaHard, and tau2-Bench).",
+  "state": "The user query or problem prompt to be answered by one of the destination LLMs.",
+  "questions": {
+    "destination": {
+      "type": "choice",
+      "instructions": "Select the destination model that will answer this query correctly at the lowest cost.",
+      "criteria": {
+        "deepseek-v3-0324": "DeepSeek V3 0324: ultra-low cost general reasoning ($0.002/query)",
+        "gpt-5-chat": "GPT-5 Chat: low-cost conversational and reasoning agent ($0.002/query)",
+        "deepseek-v3.1-terminus": "DeepSeek V3.1 Terminus: low-cost balanced model ($0.004/query)",
+        "intern-s1": "Intern S1: low-to-mid cost reasoning and coding model ($0.010/query)",
+        "qwen3-235b-a22b-2507": "Qwen 3 235B A22B: fast dense open-weights foundation model ($0.007/query)",
+        "kimi-k2-0905": "Kimi K2 0905: strong coding and multi-step reasoning ($0.012/query)",
+        "claude-sonnet-4": "Claude Sonnet 4: premier coding, logic, and instruction following ($0.016/query)",
+        "gemini-2.5-flash": "Gemini 2.5 Flash: high-speed multimodal and reasoning model ($0.020/query)",
+        "qwen3-235b-a22b-thinking-2507": "Qwen 3 235B Thinking: extended reasoning open weights ($0.021/query)",
+        "deepseek-r1-0528": "DeepSeek R1 0528: frontier reasoning and mathematical derivation ($0.050/query)",
+        "glm-4.6": "GLM 4.6: high-capability reasoning and analysis ($0.055/query)",
+        "gpt-5": "GPT-5: frontier flagship foundation model ($0.150/query)",
+        "gemini-2.5-pro": "Gemini 2.5 Pro: frontier flagship reasoning with massive context ($0.250/query)"
+      }
+    }
+  }
+}

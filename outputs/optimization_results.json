@@ -1,0 +1,922 @@
+{
+  "sweep_results": [
+    {
+      "loss_name": "Standard CE",
+      "rule": "Argmax",
+      "param": 0.0,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 0.0,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 0.5,
+      "routing_accuracy": 50.06993006993007,
+      "optimal_match_rate": 8.251748251748252,
+      "avg_cost_per_query_usd": 0.0018183311013986003,
+      "cost_per_correct_usd": 0.003631583065642456
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 1.0,
+      "routing_accuracy": 50.349650349650354,
+      "optimal_match_rate": 8.531468531468532,
+      "avg_cost_per_query_usd": 0.0014761080699300718,
+      "cost_per_correct_usd": 0.0029317146388888925
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 2.5,
+      "routing_accuracy": 49.37062937062937,
+      "optimal_match_rate": 8.811188811188812,
+      "avg_cost_per_query_usd": 0.0013202602412587436,
+      "cost_per_correct_usd": 0.002674181508498588
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 5.0,
+      "routing_accuracy": 49.93006993006993,
+      "optimal_match_rate": 8.811188811188812,
+      "avg_cost_per_query_usd": 0.0010416519580419604,
+      "cost_per_correct_usd": 0.002086221708683478
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 10.0,
+      "routing_accuracy": 49.510489510489506,
+      "optimal_match_rate": 4.895104895104895,
+      "avg_cost_per_query_usd": 0.001022036853146855,
+      "cost_per_correct_usd": 0.002064283474576275
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 25.0,
+      "routing_accuracy": 49.09090909090909,
+      "optimal_match_rate": 3.076923076923077,
+      "avg_cost_per_query_usd": 0.0023973738986013985,
+      "cost_per_correct_usd": 0.004883539423076923
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cascading",
+      "param": 0.4,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cascading",
+      "param": 0.5,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cascading",
+      "param": 0.6,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cascading",
+      "param": 0.7,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cascading",
+      "param": 0.8,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Argmax",
+      "param": 0.0,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cost-Utility",
+      "param": 0.0,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cost-Utility",
+      "param": 0.5,
+      "routing_accuracy": 50.06993006993007,
+      "optimal_match_rate": 8.251748251748252,
+      "avg_cost_per_query_usd": 0.0018183311013986003,
+      "cost_per_correct_usd": 0.003631583065642456
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cost-Utility",
+      "param": 1.0,
+      "routing_accuracy": 50.20979020979021,
+      "optimal_match_rate": 8.531468531468532,
+      "avg_cost_per_query_usd": 0.001476911566433568,
+      "cost_per_correct_usd": 0.0029414812534818975
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cost-Utility",
+      "param": 2.5,
+      "routing_accuracy": 49.37062937062937,
+      "optimal_match_rate": 8.811188811188812,
+      "avg_cost_per_query_usd": 0.0013202602412587436,
+      "cost_per_correct_usd": 0.002674181508498588
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cost-Utility",
+      "param": 5.0,
+      "routing_accuracy": 49.93006993006993,
+      "optimal_match_rate": 8.811188811188812,
+      "avg_cost_per_query_usd": 0.0010416519580419604,
+      "cost_per_correct_usd": 0.002086221708683478
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cost-Utility",
+      "param": 10.0,
+      "routing_accuracy": 49.510489510489506,
+      "optimal_match_rate": 4.895104895104895,
+      "avg_cost_per_query_usd": 0.001022036853146855,
+      "cost_per_correct_usd": 0.002064283474576275
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cost-Utility",
+      "param": 25.0,
+      "routing_accuracy": 49.09090909090909,
+      "optimal_match_rate": 3.076923076923077,
+      "avg_cost_per_query_usd": 0.0023979905,
+      "cost_per_correct_usd": 0.004884795462962963
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cascading",
+      "param": 0.4,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cascading",
+      "param": 0.5,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cascading",
+      "param": 0.6,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cascading",
+      "param": 0.7,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cascading",
+      "param": 0.8,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Argmax",
+      "param": 0.0,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cost-Utility",
+      "param": 0.0,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cost-Utility",
+      "param": 0.5,
+      "routing_accuracy": 49.93006993006993,
+      "optimal_match_rate": 8.111888111888112,
+      "avg_cost_per_query_usd": 0.0018181755069930064,
+      "cost_per_correct_usd": 0.0036414439425770293
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cost-Utility",
+      "param": 1.0,
+      "routing_accuracy": 49.93006993006993,
+      "optimal_match_rate": 8.391608391608392,
+      "avg_cost_per_query_usd": 0.0014717776783216797,
+      "cost_per_correct_usd": 0.00294767798319328
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cost-Utility",
+      "param": 2.5,
+      "routing_accuracy": 49.510489510489506,
+      "optimal_match_rate": 8.67132867132867,
+      "avg_cost_per_query_usd": 0.0013217512902097925,
+      "cost_per_correct_usd": 0.0026696389053672363
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cost-Utility",
+      "param": 5.0,
+      "routing_accuracy": 49.93006993006993,
+      "optimal_match_rate": 8.811188811188812,
+      "avg_cost_per_query_usd": 0.00104208244755245,
+      "cost_per_correct_usd": 0.0020870838935574277
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cost-Utility",
+      "param": 10.0,
+      "routing_accuracy": 49.510489510489506,
+      "optimal_match_rate": 4.895104895104895,
+      "avg_cost_per_query_usd": 0.001022036853146855,
+      "cost_per_correct_usd": 0.002064283474576275
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cost-Utility",
+      "param": 25.0,
+      "routing_accuracy": 49.09090909090909,
+      "optimal_match_rate": 3.076923076923077,
+      "avg_cost_per_query_usd": 0.0023979905,
+      "cost_per_correct_usd": 0.004884795462962963
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cascading",
+      "param": 0.4,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cascading",
+      "param": 0.5,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cascading",
+      "param": 0.6,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cascading",
+      "param": 0.7,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cascading",
+      "param": 0.8,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Argmax",
+      "param": 0.0,
+      "routing_accuracy": 50.349650349650354,
+      "optimal_match_rate": 6.153846153846154,
+      "avg_cost_per_query_usd": 0.0035994312587412573,
+      "cost_per_correct_usd": 0.007148870416666664
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cost-Utility",
+      "param": 0.0,
+      "routing_accuracy": 50.349650349650354,
+      "optimal_match_rate": 6.153846153846154,
+      "avg_cost_per_query_usd": 0.0035994312587412573,
+      "cost_per_correct_usd": 0.007148870416666664
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cost-Utility",
+      "param": 0.5,
+      "routing_accuracy": 49.65034965034965,
+      "optimal_match_rate": 8.111888111888112,
+      "avg_cost_per_query_usd": 0.0018044880384615386,
+      "cost_per_correct_usd": 0.003634391401408451
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cost-Utility",
+      "param": 1.0,
+      "routing_accuracy": 49.790209790209786,
+      "optimal_match_rate": 8.251748251748252,
+      "avg_cost_per_query_usd": 0.0014626928671328681,
+      "cost_per_correct_usd": 0.002937711797752811
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cost-Utility",
+      "param": 2.5,
+      "routing_accuracy": 49.37062937062937,
+      "optimal_match_rate": 8.811188811188812,
+      "avg_cost_per_query_usd": 0.001317068031468534,
+      "cost_per_correct_usd": 0.002667715701133149
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cost-Utility",
+      "param": 5.0,
+      "routing_accuracy": 49.790209790209786,
+      "optimal_match_rate": 8.951048951048952,
+      "avg_cost_per_query_usd": 0.0010391806293706316,
+      "cost_per_correct_usd": 0.002087118398876409
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cost-Utility",
+      "param": 10.0,
+      "routing_accuracy": 49.23076923076923,
+      "optimal_match_rate": 4.895104895104895,
+      "avg_cost_per_query_usd": 0.0010200428566433588,
+      "cost_per_correct_usd": 0.0020719620525568223
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cost-Utility",
+      "param": 25.0,
+      "routing_accuracy": 49.37062937062937,
+      "optimal_match_rate": 3.2167832167832167,
+      "avg_cost_per_query_usd": 0.002397102024475525,
+      "cost_per_correct_usd": 0.004855319964589236
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cascading",
+      "param": 0.4,
+      "routing_accuracy": 50.349650349650354,
+      "optimal_match_rate": 6.153846153846154,
+      "avg_cost_per_query_usd": 0.0035994312587412573,
+      "cost_per_correct_usd": 0.007148870416666664
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cascading",
+      "param": 0.5,
+      "routing_accuracy": 50.349650349650354,
+      "optimal_match_rate": 6.153846153846154,
+      "avg_cost_per_query_usd": 0.0035994312587412573,
+      "cost_per_correct_usd": 0.007148870416666664
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cascading",
+      "param": 0.6,
+      "routing_accuracy": 50.349650349650354,
+      "optimal_match_rate": 6.153846153846154,
+      "avg_cost_per_query_usd": 0.0035994312587412573,
+      "cost_per_correct_usd": 0.007148870416666664
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cascading",
+      "param": 0.7,
+      "routing_accuracy": 50.349650349650354,
+      "optimal_match_rate": 6.153846153846154,
+      "avg_cost_per_query_usd": 0.0035994312587412573,
+      "cost_per_correct_usd": 0.007148870416666664
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cascading",
+      "param": 0.8,
+      "routing_accuracy": 50.349650349650354,
+      "optimal_match_rate": 6.153846153846154,
+      "avg_cost_per_query_usd": 0.0035994312587412573,
+      "cost_per_correct_usd": 0.007148870416666664
+    }
+  ],
+  "pareto_points": [
+    {
+      "loss_name": "Standard CE",
+      "rule": "Argmax",
+      "param": 0.0,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 0.0,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 1.0,
+      "routing_accuracy": 50.349650349650354,
+      "optimal_match_rate": 8.531468531468532,
+      "avg_cost_per_query_usd": 0.0014761080699300718,
+      "cost_per_correct_usd": 0.0029317146388888925
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 5.0,
+      "routing_accuracy": 49.93006993006993,
+      "optimal_match_rate": 8.811188811188812,
+      "avg_cost_per_query_usd": 0.0010416519580419604,
+      "cost_per_correct_usd": 0.002086221708683478
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 10.0,
+      "routing_accuracy": 49.510489510489506,
+      "optimal_match_rate": 4.895104895104895,
+      "avg_cost_per_query_usd": 0.001022036853146855,
+      "cost_per_correct_usd": 0.002064283474576275
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cascading",
+      "param": 0.4,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cascading",
+      "param": 0.5,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cascading",
+      "param": 0.6,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cascading",
+      "param": 0.7,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Standard CE",
+      "rule": "Cascading",
+      "param": 0.8,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Argmax",
+      "param": 0.0,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cost-Utility",
+      "param": 0.0,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cost-Utility",
+      "param": 5.0,
+      "routing_accuracy": 49.93006993006993,
+      "optimal_match_rate": 8.811188811188812,
+      "avg_cost_per_query_usd": 0.0010416519580419604,
+      "cost_per_correct_usd": 0.002086221708683478
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cost-Utility",
+      "param": 10.0,
+      "routing_accuracy": 49.510489510489506,
+      "optimal_match_rate": 4.895104895104895,
+      "avg_cost_per_query_usd": 0.001022036853146855,
+      "cost_per_correct_usd": 0.002064283474576275
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cascading",
+      "param": 0.4,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cascading",
+      "param": 0.5,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cascading",
+      "param": 0.6,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cascading",
+      "param": 0.7,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Accuracy-Prioritized Regret",
+      "rule": "Cascading",
+      "param": 0.8,
+      "routing_accuracy": 50.489510489510494,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.003603953566433563,
+      "cost_per_correct_usd": 0.007138024376731295
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Argmax",
+      "param": 0.0,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cost-Utility",
+      "param": 0.0,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cost-Utility",
+      "param": 10.0,
+      "routing_accuracy": 49.510489510489506,
+      "optimal_match_rate": 4.895104895104895,
+      "avg_cost_per_query_usd": 0.001022036853146855,
+      "cost_per_correct_usd": 0.002064283474576275
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cascading",
+      "param": 0.4,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cascading",
+      "param": 0.5,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cascading",
+      "param": 0.6,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cascading",
+      "param": 0.7,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Balanced Regret",
+      "rule": "Cascading",
+      "param": 0.8,
+      "routing_accuracy": 50.62937062937063,
+      "optimal_match_rate": 6.293706293706294,
+      "avg_cost_per_query_usd": 0.0036195297482517447,
+      "cost_per_correct_usd": 0.0071490711878452965
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cost-Utility",
+      "param": 5.0,
+      "routing_accuracy": 49.790209790209786,
+      "optimal_match_rate": 8.951048951048952,
+      "avg_cost_per_query_usd": 0.0010391806293706316,
+      "cost_per_correct_usd": 0.002087118398876409
+    },
+    {
+      "loss_name": "Cost-Aggressive Regret",
+      "rule": "Cost-Utility",
+      "param": 10.0,
+      "routing_accuracy": 49.23076923076923,
+      "optimal_match_rate": 4.895104895104895,
+      "avg_cost_per_query_usd": 0.0010200428566433588,
+      "cost_per_correct_usd": 0.0020719620525568223
+    }
+  ],
+  "archetype_results": [
+    {
+      "archetype": "High-Accuracy Frontier",
+      "loss_name": "Balanced Regret",
+      "rule": "Argmax",
+      "param": 0.0,
+      "test_id": {
+        "total_queries": 1213,
+        "correct_routes": 581,
+        "routing_accuracy": 47.89777411376752,
+        "optimal_match_rate": 7.831821929101402,
+        "total_cost_usd": 31.43546044749999,
+        "avg_cost_per_query_usd": 0.02591546615622423,
+        "cost_per_correct_usd": 0.054105783902753855,
+        "avg_latency_ms": 0.0,
+        "by_benchmark": {
+          "AIME": {
+            "total": 5,
+            "correct": 4,
+            "optimal": 4,
+            "cost": 0.0037100625
+          },
+          "ArenaHard": {
+            "total": 73,
+            "correct": 43,
+            "optimal": 4,
+            "cost": 1.02875197
+          },
+          "GPQA": {
+            "total": 21,
+            "correct": 16,
+            "optimal": 3,
+            "cost": 0.0284393
+          },
+          "HLE": {
+            "total": 212,
+            "correct": 44,
+            "optimal": 10,
+            "cost": 26.971408749999995
+          },
+          "LiveCodeBench": {
+            "total": 105,
+            "correct": 67,
+            "optimal": 2,
+            "cost": 0.2431436
+          },
+          "LiveMathBench": {
+            "total": 13,
+            "correct": 5,
+            "optimal": 0,
+            "cost": 0.25237624999999997
+          },
+          "MMLU-Pro": {
+            "total": 299,
+            "correct": 231,
+            "optimal": 34,
+            "cost": 1.328720699999999
+          },
+          "SWE-Bench": {
+            "total": 52,
+            "correct": 13,
+            "optimal": 7,
+            "cost": 0.21761723000000005
+          },
+          "SimpleQA": {
+            "total": 433,
+            "correct": 158,
+            "optimal": 31,
+            "cost": 1.3612925850000006
+          }
+        }
+      },
+      "test_ood": {
+        "total_queries": 278,
+        "correct_routes": 117,
+        "routing_accuracy": 42.086330935251794,
+        "optimal_match_rate": 7.553956834532374,
+        "total_cost_usd": 23.02887323500004,
+        "avg_cost_per_query_usd": 0.0828376735071944,
+        "cost_per_correct_usd": 0.19682797636752172,
+        "avg_latency_ms": 0.0,
+        "by_benchmark": {
+          "tau2-bench": {
+            "total": 278,
+            "correct": 117,
+            "optimal": 21,
+            "cost": 23.02887323500004
+          }
+        }
+      }
+    },
+    {
+      "archetype": "Cost-Aggressive Frontier",
+      "loss_name": "Standard CE",
+      "rule": "Cost-Utility",
+      "param": 10.0,
+      "test_id": {
+        "total_queries": 1213,
+        "correct_routes": 532,
+        "routing_accuracy": 43.85820280296785,
+        "optimal_match_rate": 7.666941467436109,
+        "total_cost_usd": 1.772435332499999,
+        "avg_cost_per_query_usd": 0.0014611997794723817,
+        "cost_per_correct_usd": 0.0033316453618421034,
+        "avg_latency_ms": 0.0,
+        "by_benchmark": {
+          "AIME": {
+            "total": 5,
+            "correct": 4,
+            "optimal": 4,
+            "cost": 0.0037100625
+          },
+          "ArenaHard": {
+            "total": 73,
+            "correct": 33,
+            "optimal": 6,
+            "cost": 0.3537653300000001
+          },
+          "GPQA": {
+            "total": 21,
+            "correct": 16,
+            "optimal": 3,
+            "cost": 0.0284393
+          },
+          "HLE": {
+            "total": 212,
+            "correct": 7,
+            "optimal": 5,
+            "cost": 0.19739618999999992
+          },
+          "LiveCodeBench": {
+            "total": 105,
+            "correct": 72,
+            "optimal": 14,
+            "cost": 0.1399956
+          },
+          "LiveMathBench": {
+            "total": 13,
+            "correct": 5,
+            "optimal": 0,
+            "cost": 0.25237624999999997
+          },
+          "MMLU-Pro": {
+            "total": 299,
+            "correct": 224,
+            "optimal": 25,
+            "cost": 0.46731084000000006
+          },
+          "SWE-Bench": {
+            "total": 52,
+            "correct": 13,
+            "optimal": 7,
+            "cost": 0.21761723000000005
+          },
+          "SimpleQA": {
+            "total": 433,
+            "correct": 158,
+            "optimal": 29,
+            "cost": 0.11182452999999996
+          }
+        }
+      },
+      "test_ood": {
+        "total_queries": 278,
+        "correct_routes": 65,
+        "routing_accuracy": 23.381294964028775,
+        "optimal_match_rate": 5.39568345323741,
+        "total_cost_usd": 11.595272009999993,
+        "avg_cost_per_query_usd": 0.041709611546762566,
+        "cost_per_correct_usd": 0.17838880015384606,
+        "avg_latency_ms": 0.0,
+        "by_benchmark": {
+          "tau2-bench": {
+            "total": 278,
+            "correct": 65,
+            "optimal": 15,
+            "cost": 11.595272009999993
+          }
+        }
+      }
+    }
+  ],
+  "best_config": {
+    "loss_name": "Standard CE",
+    "rule": "Cost-Utility",
+    "param": 10.0
+  }
+}

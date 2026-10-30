@@ -1,0 +1,66 @@
+{
+  "total_queries": 1213,
+  "correct_routes": 553,
+  "routing_accuracy": 45.589447650453415,
+  "optimal_match_rate": 7.502061005770816,
+  "total_cost_usd": 15.588166947500014,
+  "avg_cost_per_query_usd": 0.012850920814097291,
+  "cost_per_correct_usd": 0.028188366993670912,
+  "avg_latency_ms": 0.3616866845290521,
+  "by_benchmark": {
+    "AIME": {
+      "total": 5,
+      "correct": 3,
+      "optimal": 0,
+      "cost": 0.01392254
+    },
+    "ArenaHard": {
+      "total": 73,
+      "correct": 45,
+      "optimal": 5,
+      "cost": 0.7858174600000001
+    },
+    "GPQA": {
+      "total": 21,
+      "correct": 18,
+      "optimal": 0,
+      "cost": 1.8531324999999998
+    },
+    "HLE": {
+      "total": 212,
+      "correct": 32,
+      "optimal": 9,
+      "cost": 10.392933999999997
+    },
+    "LiveCodeBench": {
+      "total": 105,
+      "correct": 72,
+      "optimal": 14,
+      "cost": 0.1399956
+    },
+    "LiveMathBench": {
+      "total": 13,
+      "correct": 6,
+      "optimal": 2,
+      "cost": 0.02936567
+    },
+    "MMLU-Pro": {
+      "total": 299,
+      "correct": 232,
+      "optimal": 36,
+      "cost": 0.8368387499999996
+    },
+    "SWE-Bench": {
+      "total": 52,
+      "correct": 6,
+      "optimal": 3,
+      "cost": 0.27730277999999997
+    },
+    "SimpleQA": {
+      "total": 433,
+      "correct": 139,
+      "optimal": 22,
+      "cost": 1.2588576475000002
+    }
+  }
+}

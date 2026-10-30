@@ -36,7 +36,7 @@ ENV/
 /data/
 /checkpoints/
 /models/
-/outputs/
+outputs/checkpoints/
 *.parquet
 *.pt
 *.bin
