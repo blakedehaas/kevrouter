@@ -154,6 +154,7 @@ def predict_routing(
     checkpoint_dir: Optional[Path] = None,
     rule: str = "argmax",
     mu: float = 0.0,
+    predictor: Optional[Any] = None,
 ) -> Tuple[List[str], List[float]]:
     """Generate predictions using fine-tuned Kev LocalPredictor, calibrated temperature, and decision rule."""
     from src.models.decision_rules import rule_argmax, rule_cost_utility, rule_cascading
@@ -161,8 +162,7 @@ def predict_routing(
     latencies = []
     predictions = []
 
-    predictor = None
-    if checkpoint_dir and (checkpoint_dir / "head.pt").exists():
+    if predictor is None and checkpoint_dir and (checkpoint_dir / "head.pt").exists():
         try:
             os.environ["HF_HUB_OFFLINE"] = "1"
             os.environ["TRANSFORMERS_OFFLINE"] = "1"

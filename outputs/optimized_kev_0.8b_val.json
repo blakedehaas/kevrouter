@@ -1,66 +1,66 @@
 {
   "total_queries": 1215,
-  "correct_routes": 549,
-  "routing_accuracy": 45.18518518518518,
-  "optimal_match_rate": 11.934156378600823,
-  "total_cost_usd": 2.0830411349999953,
-  "avg_cost_per_query_usd": 0.0017144371481481442,
-  "cost_per_correct_usd": 0.003794246147540975,
-  "avg_latency_ms": 0.1464088267259637,
+  "correct_routes": 657,
+  "routing_accuracy": 54.074074074074076,
+  "optimal_match_rate": 36.37860082304527,
+  "total_cost_usd": 1.1880903200000001,
+  "avg_cost_per_query_usd": 0.0009778521152263376,
+  "cost_per_correct_usd": 0.0018083566514459667,
+  "avg_latency_ms": 90.80124254579897,
   "by_benchmark": {
     "AIME": {
       "total": 5,
-      "correct": 2,
+      "correct": 3,
       "optimal": 0,
-      "cost": 0.014774979999999998
+      "cost": 0.02594597
     },
     "ArenaHard": {
       "total": 76,
-      "correct": 43,
-      "optimal": 10,
-      "cost": 0.38152754
+      "correct": 42,
+      "optimal": 32,
+      "cost": 0.07746826000000002
     },
     "GPQA": {
       "total": 18,
-      "correct": 7,
-      "optimal": 2,
-      "cost": 0.01993884
+      "correct": 11,
+      "optimal": 9,
+      "cost": 0.009773689999999998
     },
     "HLE": {
       "total": 218,
-      "correct": 24,
+      "correct": 23,
       "optimal": 18,
-      "cost": 0.4882396400000002
+      "cost": 0.5743563700000003
     },
     "LiveCodeBench": {
       "total": 105,
-      "correct": 67,
-      "optimal": 21,
-      "cost": 0.12688163000000002
+      "correct": 63,
+      "optimal": 11,
+      "cost": 0.16453659000000004
     },
     "LiveMathBench": {
       "total": 11,
       "correct": 6,
-      "optimal": 1,
-      "cost": 0.014083720000000001
+      "optimal": 3,
+      "cost": 0.01627334
     },
     "MMLU-Pro": {
       "total": 300,
-      "correct": 250,
-      "optimal": 46,
-      "cost": 0.6659130399999995
+      "correct": 259,
+      "optimal": 145,
+      "cost": 0.16996279000000009
     },
     "SWE-Bench": {
       "total": 50,
-      "correct": 11,
-      "optimal": 7,
-      "cost": 0.21569663000000008
+      "correct": 4,
+      "optimal": 4,
+      "cost": 0.13040042000000002
     },
     "SimpleQA": {
       "total": 432,
-      "correct": 139,
-      "optimal": 40,
-      "cost": 0.15598511500000015
+      "correct": 246,
+      "optimal": 220,
+      "cost": 0.019372889999999976
     }
   }
 }
