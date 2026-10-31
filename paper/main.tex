@@ -75,7 +75,8 @@ The benchmark suite is partitioned into two distinct evaluation regimes:
 \small
 \caption{Benchmark composition, domain coverage, solvability rate, and stratified sample counts.}
 \label{tab:benchmark_suite}
-\begin{tabularx}{\textwidth}{llcrrrr}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcrrrr}
 \toprule
 \textbf{Benchmark} & \textbf{Target Domain / Capability} & \textbf{Solvability} & \textbf{Train} & \textbf{Val} & \textbf{Test ID} & \textbf{Total} \\
 \midrule
@@ -93,7 +94,8 @@ AIME            & Elite Olympiad Mathematics                & 96.7\% &    50 &  
 \midrule
 $\tau^2$-Bench (\textit{OOD}) & Multi-Turn Airline/Retail Agentic Tool Use & 93.5\% & --- & --- & 278 & 278 \\
 \bottomrule
-\end{tabularx}
+\end{tabular}%
+}
 \end{table}
 
 As summarized in Table~\ref{tab:benchmark_suite}, the benchmark suite exhibits high difficulty variance. Highly solvable benchmarks like ArenaHard (97.7\%) and AIME (96.7\%) provide large cost-arbitrage opportunities for lightweight models. Conversely, HLE (51.0\%) and SWE-Bench (64.4\%) represent frontier capability bottlenecks where cost-effective models fail and routing must escalate to high-capacity reasoning flagships.
@@ -108,6 +110,7 @@ The router's destination action space $\mathcal{M}$ contains $|\mathcal{M}| = 13
 \small
 \caption{Candidate model pool, execution pricing ($c_m$), in-distribution standalone accuracy, and cost-optimal market share across the ground-truth dataset.}
 \label{tab:candidate_models}
+\resizebox{0.95\textwidth}{!}{%
 \begin{tabular}{llccc}
 \toprule
 \textbf{Model ($m$)} & \textbf{Provider / Family} & \textbf{Price / Query ($c_m$)} & \textbf{ID Accuracy} & \textbf{Optimal Share} \\
@@ -126,7 +129,8 @@ The router's destination action space $\mathcal{M}$ contains $|\mathcal{M}| = 13
 \texttt{gpt-5}                        & OpenAI            & \$0.150 & 57.64\% &  5.33\% \\
 \texttt{gemini-2.5-pro}               & Google DeepMind   & \$0.250 & \textbf{58.80\%} &  2.92\% \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 As reported in Table~\ref{tab:candidate_models}:
@@ -198,6 +202,7 @@ Prompt lengths across the raw corpus exhibit extreme variance, spanning from 5 t
 \small
 \caption{Empirical prompt length distribution across benchmarks (BPE tokens).}
 \label{tab:length_distribution}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lrrrrrr}
 \toprule
 \textbf{Benchmark} & \textbf{p50 (Median)} & \textbf{p75} & \textbf{p90} & \textbf{p95} & \textbf{p99} & \textbf{Max} \\
@@ -215,7 +220,8 @@ SWE-Bench       & 11,405 & 21,869 & 30,715 & \textbf{46,665} & 104,232 & 261,898
 \midrule
 \textbf{In-Distribution ($\mathcal{D}_{\text{ID}}$)} & \textbf{136} & \textbf{287} & \textbf{604} & \textbf{1,219} & \textbf{22,117} & \textbf{261,898} \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \paragraph{Informed Truncation Policy (1,024 Tokens)}
@@ -368,36 +374,38 @@ Following training, temperature scaling is fitted on the 500-query calibration s
 
 Table~\ref{tab:results_matrix} reports the comprehensive performance comparison between the zero-shot base checkpoint (\textsc{Kev-0.8B Base}) and fine-tuned KevRouter under three inference decision rules: greedy calibrated ArgMax, Cost-Utility Bayes optimization ($\mu=2.5$), and confidence-gated cascading ($\tau=0.6$).
 
-\begin{table*}[t]
+\begin{table}[t]
 \centering
 \small
 \caption{Comprehensive performance matrix across validation, held-out in-distribution test, and out-of-distribution ($\tau^2$-Bench) splits on LLMRouterBench. Best results per metric within each split are bolded.}
 \label{tab:results_matrix}
-\begin{tabular}{lllrrrrr}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrr}
 \toprule
-\textbf{Model} & \textbf{Decision Rule} & \textbf{Evaluation Split} & \textbf{Accuracy} & \textbf{Optimal Match} & \textbf{Avg Cost} & \textbf{Cost / Correct} & \textbf{Latency} \\
- & & & \textbf{(\%)} & \textbf{(\%)} & \textbf{(\$/query)} & \textbf{(\$/correct)} & \textbf{(ms)} \\
+\textbf{Model} & \textbf{Decision Policy} & \textbf{Accuracy} & \textbf{Optimal} & \textbf{Avg Cost} & \textbf{Cost / Correct} & \textbf{Latency} \\
+ & & \textbf{(\%)} & \textbf{(\%)} & \textbf{(\$/query)} & \textbf{(\$/correct)} & \textbf{(ms)} \\
 \midrule
-\multicolumn{8}{l}{\textit{Validation Split ($\mathcal{D}_{\text{val}}$, $N=1,215$)}} \\
-Kev-0.8B (Base)       & ArgMax (Zero-Shot)     & Validation & 47.49\% &  3.46\% & \$0.00712 & \$0.01499 & 91.5 ms \\
-Kev-0.8B (Fine-Tuned) & Calibrated ArgMax      & Validation & \textbf{59.42\%} & \textbf{39.01\%} & \$0.01577 & \$0.02654 & 90.8 ms \\
-Kev-0.8B (Fine-Tuned) & Cost-Utility ($\mu=2.5$)& Validation & 54.07\% & 36.38\% & \textbf{\$0.00098} & \textbf{\$0.00181} & 90.8 ms \\
-Kev-0.8B (Fine-Tuned) & Cascading ($\tau=0.6$) & Validation & \textbf{59.42\%} & \textbf{39.01\%} & \$0.01577 & \$0.02654 & 90.8 ms \\
+\multicolumn{7}{l}{\textbf{Validation Split} ($\mathcal{D}_{\text{val}}$, $N=1,215$)} \\
+Kev-0.8B (Base)       & ArgMax (Zero-Shot)       & 47.49\% &  3.46\% & \$0.00712 & \$0.01499 & 91.5 \\
+Kev-0.8B (Fine-Tuned) & Calibrated ArgMax        & \textbf{59.42\%} & \textbf{39.01\%} & \$0.01577 & \$0.02654 & 90.8 \\
+Kev-0.8B (Fine-Tuned) & Cost-Utility ($\mu=2.5$)  & 54.07\% & 36.38\% & \textbf{\$0.00098} & \textbf{\$0.00181} & 90.8 \\
+Kev-0.8B (Fine-Tuned) & Cascading ($\tau=0.6$)   & \textbf{59.42\%} & \textbf{39.01\%} & \$0.01577 & \$0.02654 & 90.8 \\
 \midrule
-\multicolumn{8}{l}{\textit{Held-Out In-Distribution Test Split ($\mathcal{D}_{\text{test-ID}}$, $N=1,213$)}} \\
-Kev-0.8B (Base)       & ArgMax (Zero-Shot)     & Test (ID)  & 45.75\% &  3.63\% & \$0.00765 & \$0.01672 & 92.9 ms \\
-Kev-0.8B (Fine-Tuned) & Calibrated ArgMax      & Test (ID)  & \textbf{56.72\%} & \textbf{36.44\%} & \$0.01447 & \$0.02551 & 98.9 ms \\
-Kev-0.8B (Fine-Tuned) & Cost-Utility ($\mu=2.5$)& Test (ID)  & 53.09\% & 35.28\% & \textbf{\$0.00087} & \textbf{\$0.00164} & 98.9 ms \\
-Kev-0.8B (Fine-Tuned) & Cascading ($\tau=0.6$) & Test (ID)  & \textbf{56.72\%} & \textbf{36.44\%} & \$0.01447 & \$0.02551 & 98.9 ms \\
+\multicolumn{7}{l}{\textbf{Held-Out In-Distribution Test Split} ($\mathcal{D}_{\text{test-ID}}$, $N=1,213$)} \\
+Kev-0.8B (Base)       & ArgMax (Zero-Shot)       & 45.75\% &  3.63\% & \$0.00765 & \$0.01672 & 92.9 \\
+Kev-0.8B (Fine-Tuned) & Calibrated ArgMax        & \textbf{56.72\%} & \textbf{36.44\%} & \$0.01447 & \$0.02551 & 98.9 \\
+Kev-0.8B (Fine-Tuned) & Cost-Utility ($\mu=2.5$)  & 53.09\% & 35.28\% & \textbf{\$0.00087} & \textbf{\$0.00164} & 98.9 \\
+Kev-0.8B (Fine-Tuned) & Cascading ($\tau=0.6$)   & \textbf{56.72\%} & \textbf{36.44\%} & \$0.01447 & \$0.02551 & 98.9 \\
 \midrule
-\multicolumn{8}{l}{\textit{Out-of-Distribution Transfer Split ($\tau^2$-Bench, $N=278$)}} \\
-Kev-0.8B (Base)       & ArgMax (Zero-Shot)     & Test (OOD) & 15.47\% &  2.88\% & \$0.06859 & \$0.44341 & \textbf{90.9 ms} \\
-Kev-0.8B (Fine-Tuned) & Calibrated ArgMax      & Test (OOD) & \textbf{40.29\%} & \textbf{25.18\%} & \textbf{\$0.04198} & \textbf{\$0.10421} & 95.7 ms \\
-Kev-0.8B (Fine-Tuned) & Cost-Utility ($\mu=2.5$)& Test (OOD) & \textbf{40.29\%} & \textbf{25.18\%} & \textbf{\$0.04198} & \textbf{\$0.10421} & 95.7 ms \\
-Kev-0.8B (Fine-Tuned) & Cascading ($\tau=0.6$) & Test (OOD) & \textbf{40.29\%} & \textbf{25.18\%} & \textbf{\$0.04198} & \textbf{\$0.10421} & 95.7 ms \\
+\multicolumn{7}{l}{\textbf{Out-of-Distribution Transfer Split} ($\tau^2$-Bench, $N=278$)} \\
+Kev-0.8B (Base)       & ArgMax (Zero-Shot)       & 15.47\% &  2.88\% & \$0.06859 & \$0.44341 & \textbf{90.9} \\
+Kev-0.8B (Fine-Tuned) & Calibrated ArgMax        & \textbf{40.29\%} & \textbf{25.18\%} & \textbf{\$0.04198} & \textbf{\$0.10421} & 95.7 \\
+Kev-0.8B (Fine-Tuned) & Cost-Utility ($\mu=2.5$)  & \textbf{40.29\%} & \textbf{25.18\%} & \textbf{\$0.04198} & \textbf{\$0.10421} & 95.7 \\
+Kev-0.8B (Fine-Tuned) & Cascading ($\tau=0.6$)   & \textbf{40.29\%} & \textbf{25.18\%} & \textbf{\$0.04198} & \textbf{\$0.10421} & 95.7 \\
 \bottomrule
-\end{tabular}
-\end{table*}
+\end{tabular}%
+}
+\end{table}
 
 \subsection{Key Empirical Findings}
 \label{subsec:empirical_findings}
