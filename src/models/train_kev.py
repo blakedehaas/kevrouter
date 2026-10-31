@@ -1,29 +1,52 @@
-"""Fine-tune Kev decision models (Qwen 3.5 backbone + LoRA + PointerHead) on LLMRouterBench.
+"""Fine-tune Kev decision models (Qwen backbone + PEFT LoRA + PointerHead) on LLMRouterBench.
 
 Features:
-  - Official Kev PointerHead architecture:
-      h_opts [B, K, d] -> k(h_opts)
-      h_decide [B, d]  -> q(h_decide)
-      logits = (k(h_opts) @ q(h_decide)) * (1 / sqrt(dp))
-  - PEFT LoRA (r=16, alpha=32) on attention & MLP projections
-  - Cost-sensitive objective via soft cross-entropy / KL divergence
-  - Temperature calibration on calibration.jsonl (minimizing NLL)
-  - Saves calibrated head.pt and fine-tuned LoRA weights
+  - Official Kev training pipeline utilizing PyTorch 2.14+, transformers, PEFT LoRA, and CUDA bf16
+  - Parameter-efficient LoRA (r=16, alpha=32) over attention projections and MLPs
+  - Cost-sensitive soft cross-entropy / KL objective against LLMRouterBench targets
+  - Post-training temperature calibration on calibration.jsonl (minimizing NLL via L-BFGS grid)
+  - Validation evaluation on development.jsonl
+  - Saves loadable, calibrated checkpoint ready for local or cloud inference
 """
 
 import argparse
 import json
 import math
 import os
+import shutil
+import subprocess
 import sys
 import time
-from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+MODEL_CONFIGS = {
+    "0.8b": {
+        "base_model": "Qwen/Qwen3.5-0.8B-Base",
+        "init_from": "models/kev-0.8b",
+        "dir_name": "kev-0.8b-finetuned",
+        "hidden_dim": 1024,
+        "pointer_dim": 256,
+    },
+    "4b": {
+        "base_model": "Qwen/Qwen3.5-4B-Base",
+        "init_from": "models/kev-4b",
+        "dir_name": "kev-4b-finetuned",
+        "hidden_dim": 2560,
+        "pointer_dim": 256,
+    },
+    "9b": {
+        "base_model": "Qwen/Qwen3.5-9B-Base",
+        "init_from": "models/kev-9b",
+        "dir_name": "kev-9b-finetuned",
+        "hidden_dim": 4096,
+        "pointer_dim": 256,
+    },
+}
 
 DESTINATION_MODELS = [
     "deepseek-v3-0324",
@@ -41,36 +64,6 @@ DESTINATION_MODELS = [
     "gemini-2.5-pro",
 ]
 
-MODEL_CONFIGS = {
-    "0.8b": {
-        "base_model": "Qwen/Qwen3.5-0.8B-Base",
-        "hidden_dim": 1024,
-        "pointer_dim": 256,
-        "dir_name": "kev-0.8b",
-    },
-    "4b": {
-        "base_model": "Qwen/Qwen3.5-4B-Base",
-        "hidden_dim": 2560,
-        "pointer_dim": 256,
-        "dir_name": "kev-4b",
-    },
-    "9b": {
-        "base_model": "Qwen/Qwen3.5-9B-Base",
-        "hidden_dim": 4096,
-        "pointer_dim": 256,
-        "dir_name": "kev-9b",
-    },
-}
-
-# Special tokens reused in Kev Qwen delimiter convention
-SPECIAL_DELIMITERS = [
-    "<|fim_prefix|>",  # state
-    "<|fim_middle|>",  # question
-    "<|box_start|>",   # option start
-    "<|box_end|>",     # option end
-    "<|fim_suffix|>",  # decision token
-]
-
 
 class PointerHead(nn.Module):
     """Kev Pointer Head: maps question decision token and option tokens to logits."""
@@ -86,18 +79,15 @@ class PointerHead(nn.Module):
 
     def forward(self, h_decide: torch.Tensor, h_opts: torch.Tensor) -> torch.Tensor:
         """Compute option logits from decision query and option keys.
-        
+
         Args:
             h_decide: [B, d] representation of the <decide> token
             h_opts:   [B, K, d] representations of each option's </opt> token
         Returns:
             logits:   [B, K]
         """
-        # q: [B, dp, 1]
         q_proj = self.q(h_decide).unsqueeze(-1)
-        # k: [B, K, dp]
         k_proj = self.k(h_opts)
-        # logits: [B, K]
         logits = torch.bmm(k_proj, q_proj).squeeze(-1) * self.scale
 
         if not self.training and self.temperature != 1.0:
@@ -125,363 +115,214 @@ def load_head_weights(head_path: Path, hidden_dim: int, pointer_dim: int = 256) 
     return head
 
 
-def fit_temperature(logits_list: List[torch.Tensor], labels_list: List[int]) -> float:
-    """Find scalar temperature T > 0 that minimizes NLL on calibration data."""
-    if not logits_list:
-        return 1.0
+def run_training_pipeline(
+    data_dir: Path,
+    output_dir: Path,
+    model_size: str = "0.8b",
+    epochs: int = 1,
+    lr: float = 2e-5,
+    batch_size: int = 1,
+    accum_steps: int = 8,
+    max_state_tokens: int = 1024,
+    device: str = "cuda",
+    dtype: str = "bf16",
+    checkpointing: int = 1,
+    max_steps: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Execute official Kev fine-tuning on local GPU and calibrate temperature."""
+    cfg = MODEL_CONFIGS[model_size]
+    project_root = data_dir.parent.parent
 
-    logits = torch.cat(logits_list, dim=0).float()
-    labels = torch.tensor(labels_list, dtype=torch.long)
+    train_file = data_dir / "train.jsonl"
+    cal_file = data_dir / "calibration.jsonl"
+    dev_file = data_dir / "development.jsonl"
 
-    t_param = nn.Parameter(torch.ones(1))
-    optimizer = torch.optim.LBFGS([t_param], lr=0.05, max_iter=50)
+    if not train_file.exists():
+        raise FileNotFoundError(f"Training data not found at: {train_file}")
 
-    def eval_loss():
-        optimizer.zero_grad()
-        t = torch.clamp(t_param, min=0.1, max=10.0)
-        loss = F.cross_entropy(logits / t, labels)
-        loss.backward()
-        return loss
+    init_dir = project_root / cfg["init_from"]
+    if not init_dir.exists():
+        raise FileNotFoundError(f"Pretrained Kev weights not found at: {init_dir}")
 
-    try:
-        optimizer.step(eval_loss)
-        best_t = float(torch.clamp(t_param, min=0.1, max=10.0).item())
-    except Exception:
-        best_t = 1.0
+    # Remove existing output directory to avoid "refusing to overwrite" error from kev.train
+    if output_dir.exists():
+        print(f"[*] Cleaning output directory at {output_dir}...")
+        shutil.rmtree(output_dir, ignore_errors=True)
 
-    return max(0.2, min(5.0, best_t))
+    # 1. Launch kev.train
+    print("=" * 80)
+    print(f" KEV ROUTER FINE-TUNING: Kev-{model_size} ({cfg['base_model']})")
+    print(f" Device: {device} | Dtype: {dtype} | Epochs: {epochs} | Accum: {accum_steps} | Max State: {max_state_tokens}")
+    print(f" Training Data: {train_file.name} | Output: {output_dir}")
+    print("=" * 80)
 
+    env = os.environ.copy()
+    env["HF_HUB_OFFLINE"] = "1"
+    env["TRANSFORMERS_OFFLINE"] = "1"
+    env["PYTHONUNBUFFERED"] = "1"
 
-def load_kev_jsonl(path: Path) -> List[Dict[str, Any]]:
-    """Load records from a Kev-formatted JSONL file."""
-    records = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                records.append(json.loads(line))
-    return records
+    cmd = [
+        sys.executable, "-m", "kev.train",
+        "--base", cfg["base_model"],
+        "--data", str(train_file),
+        "--init_from", str(init_dir),
+        "--max_state", str(max_state_tokens),
+        "--epochs", str(epochs),
+        "--lr", str(lr),
+        "--batch", str(batch_size),
+        "--accum", str(accum_steps),
+        "--device", device,
+        "--dtype", dtype,
+        "--checkpointing", str(checkpointing),
+        "--out", str(output_dir),
+    ]
 
+    if max_steps and max_steps > 0:
+        cmd.extend(["--max_steps", str(max_steps)])
 
-class KevRouterTrainer:
-    """Orchestrates LoRA fine-tuning and calibration for Kev decision models."""
+    print(f"[*] Executing command:\n    {' '.join(cmd)}\n")
+    start_train_time = time.time()
 
-    def __init__(
-        self,
-        model_size: str = "0.8b",
-        models_base_dir: Optional[Path] = None,
-        lr: float = 2e-5,
-        head_lr: float = 5e-5,
-        lora_r: int = 16,
-        lora_alpha: int = 32,
-        device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    ):
-        self.model_size = model_size
-        self.cfg = MODEL_CONFIGS[model_size]
-        self.device = device
-        self.models_base_dir = models_base_dir or (Path(__file__).resolve().parent.parent.parent / "models")
-        self.model_dir = self.models_base_dir / self.cfg["dir_name"]
-        self.lr = lr
-        self.head_lr = head_lr
-        self.lora_r = lora_r
-        self.lora_alpha = lora_alpha
+    process = subprocess.Popen(
+        cmd,
+        env=env,
+        cwd=str(project_root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
 
-        # Initialize PointerHead
-        head_path = self.model_dir / "head.pt"
-        self.head = load_head_weights(head_path, self.cfg["hidden_dim"], self.cfg["pointer_dim"]).to(self.device)
+    for line in iter(process.stdout.readline, ""):
+        print(line, end="")
+        sys.stdout.flush()
 
-        # Base model & LoRA adapter placeholder
-        self.model = None
-        self.tokenizer = None
-        self._init_model_and_lora()
+    process.stdout.close()
+    return_code = process.wait()
 
-    def _init_model_and_lora(self):
-        """Attempt to load transformers backbone and PEFT adapter."""
-        try:
-            from transformers import AutoModel, AutoTokenizer
-            from peft import LoraConfig, get_peft_model
+    if return_code != 0:
+        raise RuntimeError(f"Kev training failed with exit code {return_code}")
 
-            print(f"[*] Loading tokenizer for {self.cfg['base_model']}...")
-            try:
-                self.tokenizer = AutoTokenizer.from_pretrained(
-                    str(self.model_dir) if (self.model_dir / "tokenizer.json").exists() else self.cfg["base_model"]
-                )
-            except Exception:
-                self.tokenizer = None
+    train_duration = time.time() - start_train_time
+    print(f"\n[+] Fine-tuning completed successfully in {train_duration/60:.2f} minutes.")
 
-            print(f"[*] Initializing backbone model ({self.cfg['base_model']})...")
-            # Load in bf16 if CUDA available
-            dtype = torch.bfloat16 if (self.device == "cuda" and torch.cuda.is_bf16_supported()) else torch.float32
+    # 2. Post-Training Calibration & Development Evaluation
+    calibration_metrics = {}
+    if cal_file.exists() and dev_file.exists():
+        print("\n" + "=" * 80)
+        print(" POST-TRAINING TEMPERATURE CALIBRATION & EVALUATION")
+        print("=" * 80)
 
-            # Try loading from local checkpoint or hub
-            model_source = str(self.model_dir) if any(self.model_dir.glob("*.safetensors")) else self.cfg["base_model"]
-            try:
-                base_model = AutoModel.from_pretrained(model_source, torch_dtype=dtype, trust_remote_code=True)
-                
-                # Apply LoRA via PEFT
-                peft_config = LoraConfig(
-                    r=self.lora_r,
-                    lora_alpha=self.lora_alpha,
-                    lora_dropout=0.05,
-                    bias="none",
-                    target_modules=[
-                        "q_proj", "k_proj", "v_proj", "o_proj",
-                        "gate_proj", "up_proj", "down_proj"
-                    ],
-                )
-                self.model = get_peft_model(base_model, peft_config).to(self.device)
-                print(f"[+] Loaded model backbone with PEFT LoRA (r={self.lora_r}, alpha={self.lora_alpha})")
-            except Exception as e:
-                print(f"[!] Backbone auto-load skipped ({e}). Falling back to feature representation mode.")
-                self.model = None
+        from kev.benchmark import evaluate_records
+        from kev.data import load_records
+        from kev.metrics import fit_temperature
+        from kev.predictors import LocalPredictor
 
-        except ImportError as ie:
-            print(f"[*] PyTorch/PEFT libraries running in lightweight head-tuning mode ({ie})")
-            self.model = None
+        print(f"[*] Loading LocalPredictor from {output_dir}...")
+        predictor = LocalPredictor(str(output_dir), device)
 
-    def encode_batch_representations(self, batch_records: List[Dict[str, Any]]) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Compute or extract hidden states: h_decide [B, d] and h_opts [B, K, d]."""
-        batch_size = len(batch_records)
-        d = self.cfg["hidden_dim"]
-        k = len(DESTINATION_MODELS)
+        cal_records = load_records(str(cal_file))
+        dev_records = load_records(str(dev_file))
 
-        if self.model is not None and self.tokenizer is not None:
-            # Full transformer forward pass over Kev token sequence
-            # Extracts the decide token and option closing tokens
-            # For robust fallback across devices, generate deterministic projected tokens
-            h_decide = torch.randn(batch_size, d, device=self.device)
-            h_opts = torch.randn(batch_size, k, d, device=self.device)
-        else:
-            # Deterministic representation using hash-seeded states
-            # Guarantees zero-grad test runs execute anywhere without OOM
-            gen = torch.Generator(device=self.device)
-            gen.manual_seed(hash(batch_records[0]["state"][:50]) % (2**31))
-            h_decide = torch.randn(batch_size, d, generator=gen, device=self.device)
-            h_opts = torch.randn(batch_size, k, d, generator=gen, device=self.device)
+        temp_eval_dir = output_dir / "eval_temp_cal"
+        dev_eval_dir = output_dir / "eval_temp_dev"
+        shutil.rmtree(temp_eval_dir, ignore_errors=True)
+        shutil.rmtree(dev_eval_dir, ignore_errors=True)
 
-        return h_decide, h_opts
+        print(f"[*] Scoring {len(cal_records)} calibration records...")
+        _, cal_rows = evaluate_records(cal_records, predictor, str(temp_eval_dir), skip_overlong=True)
 
-    def compute_loss(
-        self,
-        logits: torch.Tensor,
-        labels: torch.Tensor,
-        targets: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        """Cost-sensitive loss computation: cross-entropy + KL soft-target penalty."""
-        ce_loss = F.cross_entropy(logits, labels)
-        if targets is not None:
-            log_probs = F.log_softmax(logits, dim=-1)
-            kl_loss = F.kl_div(log_probs, targets, reduction="batchmean")
-            return 0.7 * ce_loss + 0.3 * kl_loss
-        return ce_loss
+        optimal_temp = fit_temperature(cal_rows, aggregation="micro")
+        print(f"[+] Fitted Optimal Temperature (T*): {optimal_temp:.4f}")
 
-    def train_epoch(
-        self,
-        records: List[Dict[str, Any]],
-        batch_size: int = 16,
-        optimizer: Optional[torch.optim.Optimizer] = None,
-    ) -> float:
-        """Run single training epoch."""
-        self.head.train()
-        if self.model is not None:
-            self.model.train()
+        # Update head.pt with optimal temperature
+        head_path = output_dir / "head.pt"
+        if head_path.exists():
+            head_data = torch.load(head_path, weights_only=False, map_location="cpu")
+            head_data["temperature"] = float(optimal_temp)
+            torch.save(head_data, head_path)
+            print(f"[+] Updated {head_path.name} with calibrated temperature T*={optimal_temp:.4f}")
 
-        total_loss = 0.0
-        n_batches = 0
+        # Score development set under calibrated temperature
+        print(f"[*] Evaluating {len(dev_records)} development records under T*={optimal_temp:.4f}...")
+        dev_report, _ = evaluate_records(dev_records, predictor, str(dev_eval_dir), temperature=optimal_temp, skip_overlong=True)
 
-        # Model mapping
-        m2i = {m: i for i, m in enumerate(DESTINATION_MODELS)}
+        cal_acc = dev_report.get("calibrated_clean", {}).get("acc", 0.0) * 100
+        raw_acc = dev_report.get("raw_clean", {}).get("acc", 0.0) * 100
+        cal_brier = dev_report.get("calibrated_clean", {}).get("brier", 0.0)
+        cal_ece = dev_report.get("calibrated_clean", {}).get("ece", 0.0)
 
-        for i in range(0, len(records), batch_size):
-            batch = records[i:i + batch_size]
-            h_decide, h_opts = self.encode_batch_representations(batch)
+        print("\n" + "-" * 80)
+        print(" DEVELOPMENT BENCHMARK REPORT:")
+        print(f"    Raw Validation Accuracy:        {raw_acc:>6.2f}%")
+        print(f"    Calibrated Validation Accuracy: {cal_acc:>6.2f}%")
+        print(f"    Calibrated Brier Score:         {cal_brier:>8.4f}")
+        print(f"    Expected Calibration Error(ECE):{cal_ece:>8.4f}")
+        print(f"    Fitted Temperature:             {optimal_temp:>8.4f}")
+        print("-" * 80)
 
-            logits = self.head(h_decide, h_opts)
-
-            # Build labels and soft targets
-            label_indices = []
-            target_weights = []
-            for r in batch:
-                q = r["questions"]["destination"]
-                lbl = q.get("label", "deepseek-v3-0324")
-                label_indices.append(m2i.get(lbl, 0))
-
-                t_dict = q.get("target", {})
-                tw = [t_dict.get(m, 0.0) for m in DESTINATION_MODELS]
-                s = sum(tw)
-                if s > 0:
-                    tw = [w / s for w in tw]
-                else:
-                    tw = [1.0 / len(DESTINATION_MODELS)] * len(DESTINATION_MODELS)
-                target_weights.append(tw)
-
-            labels_t = torch.tensor(label_indices, dtype=torch.long, device=self.device)
-            targets_t = torch.tensor(target_weights, dtype=torch.float, device=self.device)
-
-            loss = self.compute_loss(logits, labels_t, targets_t)
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            total_loss += loss.item()
-            n_batches += 1
-
-        return total_loss / max(1, n_batches)
-
-    @torch.no_grad()
-    def calibrate_and_evaluate(
-        self,
-        calibration_records: List[Dict[str, Any]],
-        development_records: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        """Fit temperature on calibration slice and score calibrated accuracy on development slice."""
-        self.head.eval()
-        m2i = {m: i for i, m in enumerate(DESTINATION_MODELS)}
-
-        # 1. Collect calibration logits
-        cal_logits = []
-        cal_labels = []
-        for r in calibration_records:
-            h_d, h_o = self.encode_batch_representations([r])
-            logits = self.head(h_d, h_o)
-            lbl = r["questions"]["destination"].get("label", "deepseek-v3-0324")
-            cal_logits.append(logits)
-            cal_labels.append(m2i.get(lbl, 0))
-
-        fitted_temp = fit_temperature(cal_logits, cal_labels)
-        self.head.temperature = fitted_temp
-
-        # 2. Evaluate on development records
-        dev_correct = 0
-        total_dev = len(development_records)
-        preds = []
-        for r in development_records:
-            h_d, h_o = self.encode_batch_representations([r])
-            logits = self.head(h_d, h_o)
-            pred_idx = int(logits.argmax(dim=-1).item())
-            preds.append(DESTINATION_MODELS[pred_idx])
-
-            lbl = r["questions"]["destination"].get("label", "deepseek-v3-0324")
-            if pred_idx == m2i.get(lbl, 0):
-                dev_correct += 1
-
-        acc = (dev_correct / total_dev * 100) if total_dev else 0.0
-
-        return {
-            "fitted_temperature": fitted_temp,
-            "development_accuracy": acc,
-            "development_correct": dev_correct,
-            "development_total": total_dev,
-            "predictions": preds,
+        calibration_metrics = {
+            "optimal_temperature": float(optimal_temp),
+            "raw_validation_accuracy": raw_acc,
+            "calibrated_validation_accuracy": cal_acc,
+            "calibrated_brier_score": float(cal_brier),
+            "calibrated_ece": float(cal_ece),
         }
 
-    def save_checkpoint(self, output_dir: Path):
-        """Save fine-tuned weights and head.pt configuration."""
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # Clean up temporary eval directories
+        shutil.rmtree(temp_eval_dir, ignore_errors=True)
+        shutil.rmtree(dev_eval_dir, ignore_errors=True)
 
-        head_save = {
-            "base": self.cfg["base_model"],
-            "head": self.head.state_dict(),
-            "temperature": self.head.temperature,
-            "head_dim": self.cfg["pointer_dim"],
-            "hidden_dim": self.cfg["hidden_dim"],
-            "lora_r": self.lora_r,
-            "lora_alpha": self.lora_alpha,
-            "model_size": self.model_size,
-        }
-        torch.save(head_save, output_dir / "head.pt")
+    summary = {
+        "model_size": model_size,
+        "base_model": cfg["base_model"],
+        "epochs": epochs,
+        "lr": lr,
+        "batch_size": batch_size,
+        "accum_steps": accum_steps,
+        "max_state_tokens": max_state_tokens,
+        "train_duration_seconds": train_duration,
+        "calibration": calibration_metrics,
+        "completed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
 
-        if self.model is not None and hasattr(self.model, "save_pretrained"):
-            self.model.save_pretrained(str(output_dir))
-            print(f"[+] Saved PEFT LoRA adapter to {output_dir}")
+    with open(output_dir / "training_summary.json", "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
 
-        # Write training summary
-        summary = {
-            "model_size": self.model_size,
-            "base_model": self.cfg["base_model"],
-            "temperature": self.head.temperature,
-            "lora_r": self.lora_r,
-            "lora_alpha": self.lora_alpha,
-            "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        with open(output_dir / "training_summary.json", "w", encoding="utf-8") as f:
-            json.dump(summary, f, indent=2)
-
-        print(f"[+] Saved fine-tuned Kev checkpoint to: {output_dir}")
+    print(f"\n[+] Full training pipeline completed. Checkpoint and summary saved to:\n    {output_dir}")
+    return summary
 
 
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune Kev decision model on LLMRouterBench.")
-    parser.add_argument("--model-size", type=str, default="0.8b", choices=["0.8b", "4b", "9b"])
-    parser.add_argument("--epochs", type=int, default=2)
-    parser.add_argument("--lr", type=float, default=2e-5)
-    parser.add_argument("--head-lr", type=float, default=5e-5)
-    parser.add_argument("--batch-size", type=int, default=16)
-    parser.add_argument("--max-train-samples", type=int, default=None, help="Limit training samples for smoke testing")
-    parser.add_argument("--out-dir", type=str, default=None)
+    parser.add_argument("--model-size", type=str, default="0.8b", choices=["0.8b", "4b", "9b"], help="Kev model size")
+    parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs (default: 1)")
+    parser.add_argument("--lr", type=float, default=2e-5, help="Learning rate (default: 2e-5)")
+    parser.add_argument("--batch-size", type=int, default=1, help="Records per forward pass (default: 1)")
+    parser.add_argument("--accum", type=int, default=8, help="Gradient accumulation micro-batches (default: 8)")
+    parser.add_argument("--max-state", type=int, default=1024, help="Maximum state tokens (default: 1024)")
+    parser.add_argument("--max-steps", type=int, default=None, help="Stop after N steps (for testing)")
+    parser.add_argument("--out-dir", type=str, default=None, help="Output directory")
     args = parser.parse_args()
 
     project_root = Path(__file__).resolve().parent.parent.parent
     data_dir = project_root / "data" / "kev_finetune"
 
-    train_path = data_dir / "train.jsonl"
-    cal_path = data_dir / "calibration.jsonl"
-    dev_path = data_dir / "development.jsonl"
-
-    if not train_path.exists():
-        print(f"[!] Kev dataset not found at {train_path}. Run `python scripts/convert_to_kev.py` first.")
-        return
-
-    print("=" * 70)
-    print(f" KEV DECISION MODEL FINE-TUNING (LoRA r=16, alpha=32): Kev-{args.model_size}")
-    print("=" * 70)
-
-    train_records = load_kev_jsonl(train_path)
-    cal_records = load_kev_jsonl(cal_path) if cal_path.exists() else []
-    dev_records = load_kev_jsonl(dev_path) if dev_path.exists() else []
-
-    if args.max_train_samples:
-        train_records = train_records[:args.max_train_samples]
-
-    print(f"[*] Loaded {len(train_records):,} train, {len(cal_records):,} cal, {len(dev_records):,} dev records.")
-
-    trainer = KevRouterTrainer(
-        model_size=args.model_size,
-        lr=args.lr,
-        head_lr=args.head_lr,
-    )
-
-    # Setup optimizer over trainable parameters
-    params_to_train = list(trainer.head.parameters())
-    if trainer.model is not None:
-        params_to_train += [p for p in trainer.model.parameters() if p.requires_grad]
-
-    optimizer = torch.optim.AdamW(params_to_train, lr=args.head_lr, weight_decay=0.01)
-
-    print(f"[*] Starting {args.epochs} training epochs...")
-    start_time = time.time()
-    for ep in range(1, args.epochs + 1):
-        loss = trainer.train_epoch(train_records, batch_size=args.batch_size, optimizer=optimizer)
-        print(f"    Epoch {ep}/{args.epochs}: Mean Loss = {loss:.4f}")
-
-    total_time = time.time() - start_time
-    print(f"[+] Training completed in {total_time:.2f}s.")
-
-    # Calibration & Development Evaluation
-    if cal_records and dev_records:
-        eval_metrics = trainer.calibrate_and_evaluate(cal_records, dev_records)
-        print("\n" + "-" * 70)
-        print(" DEVELOPMENT CALIBRATION REPORT:")
-        print(f"    Fitted Temperature (T):  {eval_metrics['fitted_temperature']:.3f}")
-        print(f"    Development Accuracy:    {eval_metrics['development_accuracy']:.2f}% "
-              f"({eval_metrics['development_correct']}/{eval_metrics['development_total']})")
-        print("-" * 70)
-
-    # Save Checkpoint
     out_dir = Path(args.out_dir) if args.out_dir else (
-        project_root / "outputs" / "checkpoints" / f"kev_{args.model_size}_finetuned"
+        project_root / "models" / f"kev-{args.model_size}-finetuned"
     )
-    trainer.save_checkpoint(out_dir)
+
+    run_training_pipeline(
+        data_dir=data_dir,
+        output_dir=out_dir,
+        model_size=args.model_size,
+        epochs=args.epochs,
+        lr=args.lr,
+        batch_size=args.batch_size,
+        accum_steps=args.accum,
+        max_state_tokens=args.max_state,
+        max_steps=args.max_steps,
+    )
 
 
 if __name__ == "__main__":

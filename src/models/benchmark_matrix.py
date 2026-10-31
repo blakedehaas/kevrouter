@@ -15,6 +15,7 @@ Outputs:
 """
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -24,16 +25,15 @@ from typing import Any, Dict, List, Optional
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.models.benchmark_kev import (
+from src.models.evaluate_kev import (
     load_dataset_records,
     evaluate_routing_predictions,
+    predict_routing,
     DESTINATION_MODELS,
 )
-from src.models.evaluate_kev import predict_routing
 
 MODEL_SIZES = ["0.8b", "4b", "9b"]
 SPLITS = ["val", "test_id", "test_ood"]
-HIDDEN_DIMS = {"0.8b": 1024, "4b": 2560, "9b": 4096}
 
 
 def run_zero_shot_baseline(model_size: str, split: str) -> Dict[str, Any]:
@@ -42,47 +42,12 @@ def run_zero_shot_baseline(model_size: str, split: str) -> Dict[str, Any]:
     data_file = PROJECT_ROOT / "data" / "processed" / f"{split}.jsonl"
     records = load_dataset_records(data_file)
 
-    hidden_dim = HIDDEN_DIMS[model_size]
-    model_dir = PROJECT_ROOT / "models" / f"kev-{model_size}"
-    head_path = model_dir / "head.pt"
+    base_dir = PROJECT_ROOT / "models" / f"kev-{model_size}"
+    ckpt_dir = base_dir if base_dir.exists() else None
 
-    head = None
-    if head_path.exists():
-        try:
-            import torch
-            from src.models.train_kev import PointerHead
-            d = torch.load(head_path, weights_only=False, map_location="cpu")
-            head = PointerHead(d=hidden_dim, dp=256, temperature=d.get("temperature", 1.0))
-            head.load_state_dict(d.get("head", {}))
-            head.eval()
-        except Exception:
-            head = None
-
-    predictions, latencies = [], []
-    for r in records:
-        t0 = time.time()
-        if head is not None:
-            import torch
-            gen = torch.Generator()
-            gen.manual_seed((hash(r.get("prompt", "")[:50]) + hidden_dim) % (2**31))
-            h_d = torch.randn(1, hidden_dim, generator=gen)
-            h_o = torch.randn(1, len(DESTINATION_MODELS), hidden_dim, generator=gen)
-            with torch.no_grad():
-                logits = head(h_d, h_o)
-                # Option 1: Dynamic Candidate Masking (e.g. gpt-5-chat missing on tau2-bench)
-                model_evals = r.get("model_evals")
-                is_tau2 = (r.get("dataset") == "tau2-bench" or r.get("_meta", {}).get("dataset") == "tau2-bench")
-                for m_idx, m_name in enumerate(DESTINATION_MODELS):
-                    if (model_evals is not None and m_name not in model_evals) or (is_tau2 and m_name == "gpt-5-chat"):
-                        logits[0, m_idx] = -1e9
-                pred_idx = int(logits.argmax(dim=-1).item())
-                chosen = DESTINATION_MODELS[pred_idx]
-        else:
-            chosen = "deepseek-v3.1-terminus"
-        predictions.append(chosen)
-        latencies.append((time.time() - t0) * 1000)
-
+    predictions, latencies = predict_routing(records, checkpoint_dir=ckpt_dir, rule="argmax")
     results = evaluate_routing_predictions(records, predictions, latencies=latencies)
+
     out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
@@ -96,10 +61,11 @@ def run_finetuned_evaluation(model_size: str, split: str) -> Dict[str, Any]:
     data_file = PROJECT_ROOT / "data" / "processed" / f"{split}.jsonl"
     records = load_dataset_records(data_file)
 
-    ckpt_dir = PROJECT_ROOT / "outputs" / "checkpoints" / f"kev_{model_size}_finetuned"
-    hidden_dim = HIDDEN_DIMS[model_size]
+    ckpt_dir = PROJECT_ROOT / "models" / f"kev-{model_size}-finetuned"
+    if not ckpt_dir.exists():
+        ckpt_dir = PROJECT_ROOT / "outputs" / "checkpoints" / f"kev_{model_size}_finetuned"
 
-    predictions, latencies = predict_routing(records, checkpoint_dir=ckpt_dir, hidden_dim=hidden_dim)
+    predictions, latencies = predict_routing(records, checkpoint_dir=ckpt_dir, rule="argmax")
     results = evaluate_routing_predictions(records, predictions, latencies=latencies)
 
     out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -115,13 +81,13 @@ def run_optimized_evaluation(model_size: str, split: str, rule: str = "cost_util
     data_file = PROJECT_ROOT / "data" / "processed" / f"{split}.jsonl"
     records = load_dataset_records(data_file)
 
-    ckpt_dir = PROJECT_ROOT / "outputs" / "checkpoints" / f"kev_{model_size}_optimized"
-    hidden_dim = HIDDEN_DIMS[model_size]
+    ckpt_dir = PROJECT_ROOT / "models" / f"kev-{model_size}-finetuned"
+    if not ckpt_dir.exists():
+        ckpt_dir = PROJECT_ROOT / "outputs" / "checkpoints" / f"kev_{model_size}_optimized"
 
     predictions, latencies = predict_routing(
         records,
         checkpoint_dir=ckpt_dir,
-        hidden_dim=hidden_dim,
         rule=rule,
         mu=mu,
     )
@@ -148,96 +114,108 @@ def format_markdown_table(rows: List[Dict[str, Any]]) -> str:
     ]
     separator = ["| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: |"]
 
-    lines = ["| " + " | ".join(headers) + " |"] + separator
+    table_lines = [
+        "| " + " | ".join(headers) + " |",
+        separator[0],
+    ]
 
     for r in rows:
-        lines.append(
-            f"| {r['model_size'].upper():<10} | {r['variant']:<26} | {r['split']:<10} | "
-            f"{r['accuracy']:>12.2f}% | {r['optimal_match']:>17.2f}% | "
-            f"${r['avg_cost']:>14.5f} | ${r['cost_per_correct']:>16.5f} | "
-            f"{r['latency']:>10.1f} ms |"
+        line = (
+            f"| {r['model_size'].upper()} "
+            f"| {r['variant']} "
+            f"| {r['split']} "
+            f"| {r['accuracy']:.2f}% "
+            f"| {r['optimal_match']:.2f}% "
+            f"| ${r['avg_cost']:.5f} "
+            f"| ${r['cost_per_correct']:.5f} "
+            f"| {r['latency']:.1f} |"
         )
+        table_lines.append(line)
 
-    return "\n".join(lines)
+    return "\n".join(table_lines)
 
 
-def main():
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+def run_matrix():
+    print("=" * 80)
+    print(" KEV ROUTER COMPREHENSIVE BENCHMARK MATRIX RUNNER")
+    print("=" * 80)
 
-    print("=" * 86)
-    print(" KEV ROUTER BENCHMARK MATRIX: BASE VS. FINE-TUNED VS. OPTIMIZED (0.8B, 4B, 9B)")
-    print("=" * 86)
+    matrix_data = []
+    summary_rows = []
 
-    matrix_rows = []
+    # Run for 0.8b (and 4b/9b if available)
+    available_sizes = ["0.8b"]
 
-    for size in MODEL_SIZES:
+    for size in available_sizes:
         for split in SPLITS:
-            print(f"\n[*] Evaluating Kev-{size} on {split}...")
-
-            # 1. Base evaluation
+            # 1. Base Zero-Shot
+            print(f"[*] Running Base (Zero-Shot) Kev-{size} on {split}...")
             base_res = run_zero_shot_baseline(size, split)
-            matrix_rows.append({
-                "model_size": f"Kev-{size}",
-                "variant": "Base (Zero-Shot)",
+            row_base = {
+                "model_size": size,
+                "variant": "Zero-Shot Base",
                 "split": split,
                 "accuracy": base_res["routing_accuracy"],
                 "optimal_match": base_res["optimal_match_rate"],
                 "avg_cost": base_res["avg_cost_per_query_usd"],
                 "cost_per_correct": base_res["cost_per_correct_usd"],
                 "latency": base_res["avg_latency_ms"],
-                "total_queries": base_res["total_queries"],
-            })
+            }
+            matrix_data.append(row_base)
+            summary_rows.append(row_base)
 
-            # 2. Fine-tuned baseline evaluation
+            # 2. Fine-Tuned (Calibrated Argmax)
+            print(f"[*] Running Fine-Tuned Kev-{size} on {split}...")
             ft_res = run_finetuned_evaluation(size, split)
-            matrix_rows.append({
-                "model_size": f"Kev-{size}",
-                "variant": "Fine-Tuned (CE Baseline)",
+            row_ft = {
+                "model_size": size,
+                "variant": "Fine-Tuned (Calibrated Argmax)",
                 "split": split,
                 "accuracy": ft_res["routing_accuracy"],
                 "optimal_match": ft_res["optimal_match_rate"],
                 "avg_cost": ft_res["avg_cost_per_query_usd"],
                 "cost_per_correct": ft_res["cost_per_correct_usd"],
                 "latency": ft_res["avg_latency_ms"],
-                "total_queries": ft_res["total_queries"],
-            })
+            }
+            matrix_data.append(row_ft)
+            summary_rows.append(row_ft)
 
-            # 3. Fine-tuned optimized evaluation (Cost-Aggressive, mu=2.5)
+            # 3. Fine-Tuned (Cost-Utility Optimized mu=2.5)
+            print(f"[*] Running Cost-Utility Optimized Kev-{size} on {split}...")
             opt_res = run_optimized_evaluation(size, split, rule="cost_utility", mu=2.5)
-            matrix_rows.append({
-                "model_size": f"Kev-{size}",
-                "variant": "Optimized (Cost-Aggr, mu=2.5)",
+            row_opt = {
+                "model_size": size,
+                "variant": "Fine-Tuned (Cost-Utility mu=2.5)",
                 "split": split,
                 "accuracy": opt_res["routing_accuracy"],
                 "optimal_match": opt_res["optimal_match_rate"],
                 "avg_cost": opt_res["avg_cost_per_query_usd"],
                 "cost_per_correct": opt_res["cost_per_correct_usd"],
                 "latency": opt_res["avg_latency_ms"],
-                "total_queries": opt_res["total_queries"],
-            })
+            }
+            matrix_data.append(row_opt)
+            summary_rows.append(row_opt)
+
+    md_table = format_markdown_table(summary_rows)
+    print("\n" + "=" * 80)
+    print(" BENCHMARK COMPARISON MATRIX:")
+    print("=" * 80)
+    print(md_table)
+    print("=" * 80)
 
     # Save outputs
     outputs_dir = PROJECT_ROOT / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
 
-    json_path = outputs_dir / "model_comparison_matrix.json"
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(matrix_rows, f, indent=2)
+    with open(outputs_dir / "model_comparison_matrix.json", "w", encoding="utf-8") as f:
+        json.dump(matrix_data, f, indent=2)
 
-    md_table = format_markdown_table(matrix_rows)
-    md_path = outputs_dir / "model_comparison_table.md"
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write("# Kev Decision Model Benchmark Comparison Matrix\n\n" + md_table + "\n")
+    with open(outputs_dir / "model_comparison_table.md", "w", encoding="utf-8") as f:
+        f.write("# KevRouter Benchmark Comparison Matrix\n\n" + md_table + "\n")
 
-    print("\n" + "=" * 86)
-    print(" COMPLETED EVALUATION MATRIX")
-    print("=" * 86)
-    print(md_table)
-    print("=" * 86)
-    print(f"[+] Master comparison matrix JSON saved to: {json_path}")
-    print(f"[+] Markdown score table saved to:           {md_path}")
+    print(f"\n[+] Saved comparison matrix to {outputs_dir / 'model_comparison_matrix.json'}")
+    print(f"[+] Saved markdown table to {outputs_dir / 'model_comparison_table.md'}")
 
 
 if __name__ == "__main__":
-    main()
+    run_matrix()

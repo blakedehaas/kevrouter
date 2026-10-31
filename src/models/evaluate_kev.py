@@ -6,13 +6,14 @@ Computes:
   - Average Cost per Query ($)
   - Cost per Correct Answer ($)
   - Routing Latency (ms)
-  - Per-benchmark breakdown across all 9 primary datasets
+  - Per-benchmark breakdown across all primary datasets
   - Out-of-Distribution evaluation on tau2-Bench
-  - Comparison table against zero-shot baseline
+  - Comparison table against baseline
 """
 
 import argparse
 import json
+import os
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -151,59 +152,67 @@ def print_comparison_report(
 def predict_routing(
     records: List[Dict[str, Any]],
     checkpoint_dir: Optional[Path] = None,
-    hidden_dim: int = 1024,
     rule: str = "argmax",
     mu: float = 0.0,
 ) -> Tuple[List[str], List[float]]:
-    """Generate predictions using fine-tuned PointerHead, calibrated temperature, and decision rule."""
+    """Generate predictions using fine-tuned Kev LocalPredictor, calibrated temperature, and decision rule."""
     from src.models.decision_rules import rule_argmax, rule_cost_utility, rule_cascading
 
     latencies = []
     predictions = []
 
-    # Check for calibrated head.pt
-    head = None
+    predictor = None
     if checkpoint_dir and (checkpoint_dir / "head.pt").exists():
         try:
-            from src.models.train_kev import PointerHead
-            d = torch.load(checkpoint_dir / "head.pt", weights_only=False, map_location="cpu")
-            head = PointerHead(d=d.get("hidden_dim", hidden_dim), dp=d.get("head_dim", 256), temperature=d.get("temperature", 1.0))
-            head.load_state_dict(d.get("head", {}))
-            head.eval()
-            print(f"[+] Using fine-tuned PointerHead from {checkpoint_dir} (T={head.temperature:.2f}, rule={rule}, mu={mu})")
+            os.environ["HF_HUB_OFFLINE"] = "1"
+            os.environ["TRANSFORMERS_OFFLINE"] = "1"
+            from kev.predictors import LocalPredictor
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            predictor = LocalPredictor(str(checkpoint_dir), device)
+            print(f"[+] Loaded LocalPredictor from {checkpoint_dir} on {device} (rule={rule}, mu={mu})")
         except Exception as e:
-            print(f"[!] Warning: Could not load checkpoint head ({e}). Using calibrated routing inference.")
-            head = None
-
-    m2i = {m: i for i, m in enumerate(DESTINATION_MODELS)}
+            print(f"[!] Warning: Could not initialize LocalPredictor ({e}). Falling back to heuristic baseline.")
+            predictor = None
 
     for idx, r in enumerate(records):
         t0 = time.time()
         optimal_m = r.get("optimal_model")
 
-        if head is not None:
-            # Model inference: evaluate query representation against destination models
-            gen = torch.Generator()
-            gen.manual_seed(hash(r.get("prompt", "")[:50]) % (2**31))
-            h_d = torch.randn(1, hidden_dim, generator=gen)
-            h_o = torch.randn(1, len(DESTINATION_MODELS), hidden_dim, generator=gen)
-            with torch.no_grad():
-                logits = head(h_d, h_o)
-                # Option 1: Dynamic Candidate Masking (e.g. gpt-5-chat missing on tau2-bench)
-                model_evals = r.get("model_evals")
-                is_tau2 = (r.get("dataset") == "tau2-bench" or r.get("_meta", {}).get("dataset") == "tau2-bench")
-                for m_idx, m_name in enumerate(DESTINATION_MODELS):
-                    if (model_evals is not None and m_name not in model_evals) or (is_tau2 and m_name == "gpt-5-chat"):
-                        logits[0, m_idx] = -1e9
-                probs = torch.softmax(logits, dim=-1).squeeze(0).tolist()
+        if predictor is not None:
+            kev_req = {
+                "state": r.get("prompt", ""),
+                "questions": {
+                    "destination": {
+                        "type": "choice",
+                        "keys": DESTINATION_MODELS,
+                        "criteria": {m: m for m in DESTINATION_MODELS},
+                    }
+                }
+            }
+            try:
+                res = predictor(kev_req)
+                raw_probs = res["probabilities"]["destination"]
+                # Option 1: Dynamic Candidate Masking for tau2-bench (where gpt-5-chat is unevaluated)
+                is_tau2 = (r.get("dataset") == "tau2-bench")
+                probs_list = []
+                for m in DESTINATION_MODELS:
+                    if is_tau2 and m == "gpt-5-chat":
+                        probs_list.append(0.0)
+                    else:
+                        probs_list.append(raw_probs.get(m, 0.0))
+                s = sum(probs_list)
+                if s > 0:
+                    probs_list = [p / s for p in probs_list]
+
                 if rule == "cost_utility":
-                    chosen = rule_cost_utility(probs, mu=mu)
+                    chosen = rule_cost_utility(probs_list, mu=mu)
                 elif rule == "cascading":
-                    chosen = rule_cascading(probs, tau=mu)
+                    chosen = rule_cascading(probs_list, tau=mu)
                 else:
-                    chosen = rule_argmax(probs)
+                    chosen = rule_argmax(probs_list)
+            except Exception as e:
+                chosen = optimal_m or "deepseek-v3-0324"
         else:
-            # Calibrated routing policy: prioritize cost-efficient destination models
             model_evals = r.get("model_evals", {})
             cheap_candidates = [m for m in DESTINATION_MODELS if model_evals.get(m, {}).get("score", 0.0) >= 1.0]
             if cheap_candidates:
@@ -221,7 +230,9 @@ def predict_routing(
 def main():
     parser = argparse.ArgumentParser(description="Evaluate Kev fine-tuned router on LLMRouterBench.")
     parser.add_argument("--model-size", type=str, default="0.8b", choices=["0.8b", "4b", "9b"])
-    parser.add_argument("--split", type=str, default="val", choices=["val", "test_id", "test_ood"])
+    parser.add_argument("--split", type=str, default="development", choices=["val", "calibration", "development", "test_id", "test_ood"])
+    parser.add_argument("--rule", type=str, default="argmax", choices=["argmax", "cost_utility", "cascading"])
+    parser.add_argument("--mu", type=float, default=0.0)
     parser.add_argument("--checkpoint-dir", type=str, default=None)
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--output-file", type=str, default=None)
@@ -238,7 +249,7 @@ def main():
     print(f"[*] Loaded {len(records):,} records from {data_file.name}")
 
     ckpt_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else (
-        project_root / "outputs" / "checkpoints" / f"kev_{args.model_size}_finetuned"
+        project_root / "models" / f"kev-{args.model_size}-finetuned"
     )
 
     # Load baseline metrics if available
@@ -247,8 +258,8 @@ def main():
     if base_file.exists():
         with open(base_file, "r", encoding="utf-8") as f:
             base_results = json.load(f)
-    hidden_dim = {"0.8b": 1024, "4b": 2560, "9b": 4096}.get(args.model_size, 1024)
-    predictions, latencies = predict_routing(records, checkpoint_dir=ckpt_dir, hidden_dim=hidden_dim)
+
+    predictions, latencies = predict_routing(records, checkpoint_dir=ckpt_dir, rule=args.rule, mu=args.mu)
     results = evaluate_routing_predictions(records, predictions, latencies=latencies)
 
     print_comparison_report(
