@@ -6,6 +6,7 @@
 \usepackage{amsmath,amssymb,amsfonts,amsthm}
 \usepackage{booktabs}
 \usepackage{graphicx}
+\graphicspath{{figures/}{paper/figures/}}
 \usepackage{tabularx}
 \usepackage{microtype}
 \usepackage{xcolor}
@@ -22,6 +23,8 @@
 \title{\textbf{KevRouter: Decision Model Cost-Aware Router}}
 \author{Blake de Haas \\
 \texttt{blakedehaas@github.com}
+\and Abhinav Dugar \\
+\texttt{dugarabhinav2001@gmail.com}
 }
 \date{\today}
 
@@ -305,7 +308,7 @@ The model is trained on $\mathcal{D}_{\text{train}}$ using a cost-sensitive soft
 \end{equation}
 Minimizing $\mathcal{L}_{\text{route}}$ is equivalent to minimizing the Kullback-Leibler (KL) divergence $\mathbb{D}_{\text{KL}}(q_i \parallel p_i)$ between the empirical cost-sensitive target distribution and the model's predicted softmax distribution.
 
-Optimization is performed using AdamW with cosine learning rate scheduling (peak learning rate $\eta = 2 \times 10^{-4}$), weight decay 0.01, and warmup ratio 0.05 over 3 fine-tuning epochs.
+The 4B and 9B experiments use AdamW with weight decay 0.01 and a one-cycle learning-rate schedule. Two configurations were evaluated: one epoch at learning rate $2 \times 10^{-5}$ and three epochs at $2 \times 10^{-4}$. Because both settings differ, their comparison does not isolate epoch count. The historical 0.8B results use one epoch; the exact training-record manifest is unavailable.
 
 \subsection{Post-Hoc Probability Calibration}
 \label{subsec:calibration_method}
@@ -336,7 +339,7 @@ Penalizes expensive endpoints by trading marginal confidence against execution c
 \begin{equation}
 m^*_{\text{utility}} = \arg\max_{m \in \mathcal{M}} \left[ \hat{p}_m(x) - \mu \cdot c_m \right].
 \end{equation}
-Sweeping $\mu \in [0.05, 0.20]$ on $\mathcal{D}_{\text{dev}}$ shifts routing mass toward cheaper foundation models while retaining flagships when confidence differences exceed the cost barrier.
+Varying $\mu$ shifts routing mass according to the probability and fixed model cost proxies. For the 4B and 9B analysis, we sweep 503 values from zero through 100 on $\mathcal{D}_{\text{dev}}$ and select settings under prespecified average-cost budgets.
 
 \paragraph{3. Confidence-Gated Cascading Policy}
 Partitions $\mathcal{M}$ into a cost-effective tier $\mathcal{M}_{\text{cheap}}$ ($c_m \le \$0.010$) and a frontier flagship tier $\mathcal{M}_{\text{flagship}}$. The router evaluates whether the top cost-effective candidate meets confidence threshold $\tau \in [0.60, 0.85]$:
@@ -346,7 +349,7 @@ m^*_{\text{cascade}} = \begin{cases}
 \arg\max_{m \in \mathcal{M}_{\text{flagship}}} \hat{p}_m(x), & \text{otherwise.}
 \end{cases}
 \end{equation}
-This policy enforces strict accuracy preservation on high-complexity queries while routing routine queries to low-cost endpoints.
+This rule does not guarantee accuracy preservation; its empirical accuracy and cost are evaluated below.
 
 % ==============================================================================
 % SECTION 5: EXPERIMENTS AND RESULTS
@@ -365,9 +368,9 @@ We evaluate KevRouter on the full LLMRouterBench suite across in-distribution an
 \subsection{Experimental Setup}
 \label{subsec:exp_setup}
 
-All models are trained and evaluated on an NVIDIA GeForce RTX 5080 (16GB VRAM, CUDA 13.5). The router utilizes the open 852M parameter \texttt{Qwen/Qwen3.5-0.8B-Base} architecture with low-rank adaptation ($r=16, \alpha=32$) and PointerHead projection ($d_p=256$), comprising 11.3M trainable parameters. Training executes for one complete epoch over 9,193 admitted training records in \texttt{bfloat16} with gradient checkpointing, batch size 1, and 8 accumulation micro-batches (effective batch size 8). Total fine-tuning runtime was 104.97 minutes with peak VRAM utilization of 3.92 GB.
+The historical 0.8B model was trained and evaluated on an NVIDIA GeForce RTX 5080 (16GB VRAM, CUDA 13.5). The router utilizes the open 852M parameter \texttt{Qwen/Qwen3.5-0.8B-Base} architecture with low-rank adaptation ($r=16, \alpha=32$) and PointerHead projection ($d_p=256$), comprising 11.3M trainable parameters. Training executes for one complete epoch over 9,193 admitted training records in \texttt{bfloat16} with gradient checkpointing, batch size 1, and 8 accumulation micro-batches (effective batch size 8). Total fine-tuning runtime was 104.97 minutes with peak VRAM utilization of 3.92 GB.
 
-Following training, temperature scaling is fitted on the 500-query calibration split $\mathcal{D}_{\text{cal}}$, converging to optimal temperature $T^* = 0.6156$ (Brier score: 0.7149, ECE: 0.3066). The calibrated checkpoint is subsequently deployed across all evaluation splits.
+For the historical 0.8B run, the paper reports a fitted temperature $T^* = 0.6156$ (Brier score: 0.7149, ECE: 0.3066). The 4B and 9B experiments and their calibration procedures are described separately below. The original 0.8B record-level predictions and training manifest are unavailable for independent verification.
 
 \subsection{Comparative Benchmark Matrix}
 \label{subsec:benchmark_matrix}
@@ -407,38 +410,110 @@ Kev-0.8B (Fine-Tuned) & Cascading ($\tau=0.6$)   & \textbf{40.29\%} & \textbf{25
 }
 \end{table}
 
-\subsection{Key Empirical Findings}
-\label{subsec:empirical_findings}
+\subsection{4B and 9B Experiments}
+\label{subsec:larger_models}
 
-\paragraph{1. Marked Accuracy and Pareto-Optimal Improvement}
-On the held-out in-distribution test set ($\mathcal{D}_{\text{test-ID}}$), fine-tuning increases routing accuracy from \textbf{45.75\% to 56.72\%} (+10.97\% absolute gain). More critically, the optimal match rate experiences a tenfold surge, increasing from \textbf{3.63\% to 36.44\%} (+32.81\% absolute gain). While the zero-shot base checkpoint frequently misallocates queries to mid-tier endpoints that answer incorrectly or redundantly, KevRouter learns the precise boundary of model capabilities across distinct task domains.
+We additionally evaluated pretrained Kev 4B and 9B checkpoints and fine-tuned each on LLMRouterBench using rank-16 LoRA and the trainable routing head on an NVIDIA A100 80GB GPU. The Qwen backbones remained frozen. One run per model used one epoch at $2\times10^{-5}$; a second used three epochs at $2\times10^{-4}$, with batch size one and gradient accumulation over eight records. Both configurations admitted 9,193 training records under the same Qwen-tokenizer context filter used by the current pipeline: 545 of 9,738 records were excluded, including all 398 SWE-Bench records. This matches the reported 0.8B count, but the historical record-level manifest is unavailable, so exact identity cannot be verified. The three-epoch jobs each completed in approximately 9 hours 40 minutes including calibration and evaluation.
 
-\paragraph{2. Cost-Utility Optimization Slashing Expenditures by 90\%}
-Applying the Cost-Utility decision rule with parameter $\mu=2.5$ yields significant economic gains. On $\mathcal{D}_{\text{test-ID}}$, Cost-Utility routing preserves high routing accuracy at \textbf{53.09\%} (well above the 45.75\% base model) while driving average query cost down from \$0.00765 to \textbf{\$0.00087}---an \textbf{88.6\% reduction in operational cost}. Evaluated on net economic efficiency, cost per correct answer drops from \$0.01672 to \textbf{\$0.00164}, representing a \textbf{90.2\% cost reduction}.
+The one-epoch runs fitted temperature against hard labels using the installed trainer's grid search; the three-epoch runs fitted temperature on 500 held-out calibration examples by minimizing soft-target negative log-likelihood with L-BFGS-B. A positive temperature does not alter the argmax ordering. For the three-epoch runs, calibrated probabilities support the cost and tier policies below. Each development and test evaluation scores only candidates with a recorded outcome; on OOD, this excludes \texttt{gpt-5-chat}. Such offline masking is not a guarantee of deployment-time availability. Routing accuracy is the fraction of queries for which the selected candidate has recorded score at least one; cost is the recorded downstream cost and excludes router inference cost.
 
-\paragraph{3. Out-of-Distribution Robustness on $\tau^2$-Bench}
-On the completely held-out $\tau^2$-Bench benchmark ($N=278$), the zero-shot base model collapses to 15.47\% accuracy with an exorbitant cost of \$0.44341 per correct answer, primarily due to catastrophic misrouting into high-cost reasoning models that fail the task. 
+\begin{table}[t]
+\centering
+\small
+\caption{Argmax results for historical 0.8B runs and the new 4B and 9B runs, compared with selecting Qwen 235B for every query. ID has 1,213 records and OOD has 278. Cost is the mean recorded ID downstream cost per query. The 0.8B rows are reported historical aggregates, without record-level predictions available for verification.}
+\label{tab:size_results}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Router / policy} & \textbf{ID accuracy} & \textbf{OOD accuracy} & \textbf{ID cost} \\
+\midrule
+0.8B pretrained (historical) & 45.75\% & 15.47\% & \$0.00765 \\
+0.8B fine-tuned, 1 epoch (historical) & 56.72\% & 40.29\% & \$0.01447 \\
+4B pretrained & 43.61\% & 41.01\% & \$0.00801 \\
+4B fine-tuned, 1 epoch & 56.64\% & 40.29\% & \$0.01464 \\
+4B fine-tuned, 3 epochs & 56.14\% & 37.77\% & \$0.01118 \\
+9B pretrained & 45.01\% & 9.71\% & \$0.00959 \\
+9B fine-tuned, 1 epoch & 56.80\% & 40.29\% & \$0.01421 \\
+9B fine-tuned, 3 epochs & 56.31\% & 38.13\% & \$0.01115 \\
+Fixed Qwen 235B & 53.42\% & 40.29\% & \$0.00083 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-In contrast, KevRouter achieves \textbf{40.29\% accuracy} (+24.82\% absolute gain; a 2.6$\times$ improvement) and increases optimal model matching from 2.88\% to \textbf{25.18\%}. Concurrently, average query cost drops by 38.8\% (\$0.04198 vs. \$0.06859), cutting cost per correct answer by \textbf{76.5\%} (\$0.10421 vs. \$0.44341). Dynamic candidate masking ensures that unevaluated candidates (\texttt{gpt-5-chat}) receive null probability mass, enabling smooth zero-failure evaluation.
+Table~\ref{tab:size_results} shows a substantial ID improvement from fine-tuning each larger router, but no clear accuracy advantage from increasing router size. The three-epoch 4B and 9B models chose different destinations on 519 of 1,213 ID records; 4B alone was correct on 66 and 9B alone on 68. Their similar aggregate accuracy therefore does not imply identical routing behavior. On OOD, the one-epoch 4B and 9B models chose Qwen 235B on all 278 records, explaining their identical 40.29\% accuracy.
 
-\paragraph{4. Real-Time Inference Latency}
-Across all evaluation splits and decision strategies, KevRouter executes with a median latency of \textbf{90.8 to 98.9 ms per query} on consumer-grade hardware. Because routing decisions are computed via a single transformer forward pass followed by a scalar dot-product PointerHead, the computational overhead is negligible compared to the downstream generation latencies of the destination LLMs (typically 1,000--15,000 ms), establishing production viability for real-time traffic dispatch.
+\subsection{Development-Selected Cost Policies}
+\label{subsec:cost_curves}
+
+Using saved calibrated probabilities from the three-epoch runs, we swept 503 values of $\mu$: zero, a logarithmic grid from $10^{-4}$ to 100, and 2.5. For each router and each prespecified development average-cost budget of \$0.001, \$0.002, \$0.005, \$0.010 and \$0.020 per query, we selected the highest-accuracy eligible setting on the 715-record development set, breaking ties by lower cost and then lower $\mu$. The fixed model cost proxies in the decision rule differ from the per-query recorded costs used to evaluate mean expenditure. An empirical budget on development is not a per-query guarantee and need not hold on other distributions. ID and OOD results had already been inspected before this analysis and are not fresh confirmation sets.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Development-selected cost-utility policies evaluated on the ID test set. Budgets refer to development mean cost, not test-time guarantees. All costs exclude router inference.}
+\label{tab:cost_sweep}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Router} & \textbf{Dev. budget} & $\boldsymbol{\mu}$ & \textbf{ID accuracy} & \textbf{ID cost} \\
+\midrule
+4B & \$0.001 & 73.7904 & 46.74\% & \$0.00089 \\
+4B & \$0.002 & 15.2757 & 48.39\% & \$0.00152 \\
+4B & \$0.005 & 0.7516 & 53.83\% & \$0.00475 \\
+4B & \$0.010 & 0.0871 & 54.66\% & \$0.00901 \\
+4B & \$0.020 & 0.0000 & 56.14\% & \$0.01118 \\
+9B & \$0.001 & 73.7904 & 46.08\% & \$0.00092 \\
+9B & \$0.002 & 1.5849 & 53.34\% & \$0.00184 \\
+9B & \$0.005 & 1.2706 & 53.83\% & \$0.00239 \\
+9B & \$0.010 & 0.1117 & 55.32\% & \$0.00940 \\
+9B & \$0.020 & 0.0023 & 56.39\% & \$0.01114 \\
+\midrule
+Fixed Qwen 235B & --- & --- & 53.42\% & \$0.00083 \\
+Fixed GPT-5 & --- & --- & 56.55\% & \$0.02933 \\
+Fixed Gemini 2.5 Pro & --- & --- & 58.37\% & \$0.06039 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/kev_id_accuracy_cost.png}
+\caption{ID test accuracy and recorded downstream cost for every fixed-model baseline and the 4B/9B policies selected on development. Labels on router points denote development budgets in dollars per query. Lines connect evaluated settings and do not establish performance at interpolated points.}
+\label{fig:id_cost}
+\end{figure}
+
+At the \$0.005 development budget, the selected 9B policy reached 53.83\% ID accuracy at \$0.00239 per query, compared with 53.42\% at \$0.00083 for fixed Qwen. The 9B argmax policy reached 56.31\% at \$0.01115. Figure~\ref{fig:id_cost} places these operating points alongside all 13 fixed candidates; no single claim of cost efficiency applies independently of the desired accuracy and baseline.
+
+\subsection{Paired Uncertainty and Error Analysis}
+\label{subsec:paired_uncertainty}
+
+We computed paired 95\% percentile bootstrap intervals from 5,000 resamples, clustering on query hash and using the same sampled clusters for both methods. Intervals describe sampling variation conditional on the saved trained models, not retraining variance or multiple-comparison uncertainty. For ID, three-epoch 9B argmax minus fixed Qwen was $+2.89$ percentage points (95\% interval $[+0.66,+5.11]$): 9B alone succeeded on 112 records and Qwen alone on 77. For the 9B policy selected at the \$0.005 development budget, the difference was $+0.41$ points ($[-1.57,+2.39]$), with 80 and 75 unique successes respectively. Three-epoch 4B minus 9B argmax was $-0.16$ points ($[-2.06,+1.65]$). The one-epoch 4B minus 9B interval was $[-0.99,+0.66]$ points. The historical 0.8B aggregate lacks per-record predictions and cannot be included in paired comparisons.
+
+Comparing three-epoch 9B argmax with fixed Qwen, ID correct counts were 32 versus 20 of 212 HLE records and 81 versus 72 of 105 LiveCodeBench records. They were 239 versus 240 of 299 MMLU-Pro records and 11 versus 11 of 52 SWE-Bench records. The three-epoch 9B router selected GPT-5 for 180 ID records, accounting for \$9.47 of its \$13.53 total recorded downstream cost; GPT-5 answered 69 of those selected records correctly. These queries are selected by the router and need not have the same difficulty as other queries. Breakdown by prompt length is similarly descriptive because length and benchmark type are correlated. Small per-benchmark groups and repeated inspection warrant caution.
+
+\subsection{Exploratory OOD Comparison}
+\label{subsec:ood_baselines}
+
+OOD contains 278 records with 167 distinct query hashes; bootstrap resampling clusters repeated query text, which may occur in distinct scenarios. The three-epoch 4B tier gate at $\tau=0.6$ achieved 48.92\% at \$0.10027 per query while selecting \texttt{kimi-k2-0905} on 273 records. Fixed Kimi achieved the same 48.92\% at \$0.10036. Fixed \texttt{glm-4.6} achieved 53.96\% at \$0.09931, exceeding the gate's observed accuracy at lower recorded cost. Thus, improvement over fixed Qwen alone is insufficient to establish an OOD routing benefit. Figure~\ref{fig:ood_cost} compares all 12 available OOD fixed candidates with the unchanged development-selected 4B and 9B policies. These post hoc OOD comparisons are exploratory.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/kev_ood_accuracy_cost.png}
+\caption{Exploratory OOD accuracy and recorded downstream cost for all available fixed models and the unchanged development-selected policies. Cost and accuracy reflect the benchmark's recorded outputs.}
+\label{fig:ood_cost}
+\end{figure}
 
 % ==============================================================================
 % SECTION 6: DISCUSSION
 % ==============================================================================
 \section{Discussion}
 \label{sec:discussion}
-% TODO: Discussion to be added upon experimental analysis.
-\noindent\textit{[TODO: Discussion on routing failure modes, calibration bounds, and cost-latency trade-offs.]}
+Fine-tuning improves ID accuracy for both larger routers, but the observed 4B--9B difference is small and uncertain. The trade-off with fixed-model baselines is central: argmax routing improves ID accuracy over fixed Qwen at substantially greater recorded downstream cost, while the selected cheaper operating point does not establish an accuracy improvement. On OOD, the near-constant Kimi tier-gate choice illustrates why comparisons against several fixed candidates are necessary. The original 0.8B per-record outputs and exact training manifest are unavailable, the test sets have been examined repeatedly, and the two larger-model training configurations vary both epoch count and learning rate. These limitations prevent a controlled scaling or generalization claim.
 
 % ==============================================================================
 % SECTION 7: CONCLUSION
 % ==============================================================================
 \section{Conclusion}
 \label{sec:conclusion}
-% TODO: Conclusion to be written at final completion.
-\noindent\textit{[TODO: Conclusion summarizing key empirical findings.]}
+On LLMRouterBench, fine-tuned 4B and 9B Kev routers achieve approximately 56--57\% ID argmax accuracy, close to the previously reported 0.8B result. The 9B router improves ID accuracy over always choosing Qwen in a paired analysis, but at considerably higher recorded downstream cost. Development-selected cost policies and OOD fixed-model comparisons show that a routing benefit depends on the operating point and baseline. Independent held-out evaluation and controlled training ablations are needed to assess stability and generalization.
 
 \end{document}
 

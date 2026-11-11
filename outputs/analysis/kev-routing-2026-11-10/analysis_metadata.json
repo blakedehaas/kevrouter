@@ -1,0 +1,42 @@
+{
+  "seed": 20261110,
+  "bootstrap_replicates": 5000,
+  "bootstrap": "paired nonparametric bootstrap clustered by query_hash; percentile intervals",
+  "mu_grid_size": 503,
+  "mu_min": 0.0,
+  "mu_max": 100.0,
+  "budgets": [
+    0.001,
+    0.002,
+    0.005,
+    0.01,
+    0.02
+  ],
+  "selection": "highest development accuracy subject to mean development recorded downstream cost <= budget; ties lower cost then lower mu; infeasible budgets omitted",
+  "decision_costs": {
+    "deepseek-v3-0324": 0.002,
+    "gpt-5-chat": 0.0022,
+    "deepseek-v3.1-terminus": 0.0038,
+    "qwen3-235b-a22b-2507": 0.0071,
+    "intern-s1": 0.0095,
+    "kimi-k2-0905": 0.0125,
+    "claude-sonnet-4": 0.0158,
+    "gemini-2.5-flash": 0.0195,
+    "qwen3-235b-a22b-thinking-2507": 0.021,
+    "deepseek-r1-0528": 0.0485,
+    "glm-4.6": 0.054,
+    "gpt-5": 0.152,
+    "gemini-2.5-pro": 0.245
+  },
+  "development_prompt_length_cutpoints_cl100k": [
+    24.0,
+    128.0,
+    300.0
+  ],
+  "notes": [
+    "Decision uses fixed per-model proxy costs; evaluation uses per-query recorded costs.",
+    "Development-selected settings evaluated unchanged on ID and exploratory OOD.",
+    "Three epochs at 2e-4 compared with one epoch at 2e-5; not a single-variable epoch ablation.",
+    "All prices and scores are dataset measurements; router execution cost is excluded."
+  ]
+}

@@ -37,6 +37,7 @@ ENV/
 /checkpoints/
 /models/
 outputs/checkpoints/
+/outputs/experiments/
 *.parquet
 *.pt
 *.bin
